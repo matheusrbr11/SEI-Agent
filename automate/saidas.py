@@ -24,6 +24,7 @@ from automate import teams
 from automate.correcao import corrigir_formato
 from automate.extracao import usar_nome_atual
 from automate.validador import validar_saida
+from banco.controle import ControleProcessos
 from sei.modelos import nome_seguro
 
 _PROCESSO = re.compile(r"^##\s+Processo\s*$", re.I | re.M)
@@ -51,6 +52,31 @@ class Resultado:
     @property
     def situacao(self) -> str:
         return "ERRO" if self.erros else "AVISO" if self.avisos else "OK"
+
+
+def registrar_no_banco(controle: ControleProcessos, resultado: Resultado, teams_enviado: bool | None = None) -> bool:
+    """Marca no banco que a análise do processo chegou (`analisado`) e acrescenta os eventos ao historico.
+
+    A análise com ERRO de validação também conta como `analisado`: o processo não deve ser coletado de novo por causa
+    disso. O resumo dos ERROs fica na coluna `erro`, e as contagens em `validacao_erros` e `validacao_avisos`.
+    `teams_enviado` é None se o envio ao Teams nem foi tentado. False se o processo não está no banco (ou a análise
+    não traz o número); o historico recebe os eventos de qualquer forma.
+    """
+    if not resultado.numero:
+        return False
+    erros, avisos = len(resultado.erros), len(resultado.avisos)
+    resumo = f"Validação: {erros} ERRO(s)" if erros else None
+    atualizou = controle.registrar_analise(
+        resultado.numero, resultado.corrigido, resumo,
+        validacao_erros=erros, validacao_avisos=avisos, teams_enviado=teams_enviado,
+    )
+    controle.registrar_evento(
+        resultado.numero, "analise", "erro" if erros else "aviso" if avisos else "ok",
+        f"{resultado.arquivo}: {erros} ERRO(s), {avisos} AVISO(s)",
+    )
+    if teams_enviado is not None:
+        controle.registrar_evento(resultado.numero, "teams", "ok" if teams_enviado else "erro")
+    return atualizou
 
 
 def numero_do_processo(markdown: str) -> str | None:
@@ -245,13 +271,29 @@ def main(argv: list[str] | None = None) -> int:
     )
     # --refazer reprocessa o que já foi enviado: não reenvia ao Teams (evita mensagens repetidas)
     enviar_ao_teams = not (args.sem_teams or args.refazer) and teams.configurado()
-    for r in resultados:
-        print(f"[{r.situacao}] {r.arquivo} (processo {r.numero or '?'}): {len(r.correcoes)} correção(ões), "
-              f"{len(r.erros)} erro(s), {len(r.avisos)} aviso(s)")
-        for problema in r.problemas:
-            print(f"    {problema}")
-        if enviar_ao_teams:
-            print(f"    Teams: {'enviada' if teams.enviar_resultado(r) else 'NÃO enviada (veja o log)'}")
+    codigo = 1 if any(r.erros for r in resultados) else 0
+    controle = ControleProcessos(config.CAMINHO_BANCO) if resultados else None  # só registra execução se houve análise
+    try:
+        if controle:
+            controle.iniciar_execucao("saidas", " ".join(argv if argv is not None else sys.argv[1:]))
+        for r in resultados:
+            print(f"[{r.situacao}] {r.arquivo} (processo {r.numero or '?'}): {len(r.correcoes)} correção(ões), "
+                  f"{len(r.erros)} erro(s), {len(r.avisos)} aviso(s)")
+            for problema in r.problemas:
+                print(f"    {problema}")
+            enviado = None  # None: o envio ao Teams nem foi tentado
+            if enviar_ao_teams:
+                enviado = teams.enviar_resultado(r)
+                print(f"    Teams: {'enviada' if enviado else 'NÃO enviada (veja o log)'}")
+            try:
+                if not registrar_no_banco(controle, r, enviado):
+                    print(f"Banco: o processo {r.numero or '?'} ({r.arquivo}) não está no banco; status não atualizado.")
+            except Exception as erro:  # a análise já foi corrigida em disco: um problema no banco não a invalida
+                print(f"Banco: não foi possível atualizar o status de {r.arquivo}: {erro}")
+    finally:
+        if controle:
+            controle.finalizar_execucao(codigo)
+            controle.fechar()
     if resultados:
         print(f"Resultados em: {config.PASTA_AUTOMATE_SAIDA}")
     else:
@@ -263,7 +305,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             print("A pasta de saída não tem nenhuma análise (.md).")
-    return 1 if any(r.erros for r in resultados) else 0
+    return codigo
 
 
 if __name__ == "__main__":

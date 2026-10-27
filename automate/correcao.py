@@ -12,6 +12,8 @@ _TITULO_DE_SUBSECAO_OU_SECAO = re.compile(r"^#{2,3}\s+\S")
 _LINHA_PREENCHER = re.compile(r"^\s*(?:\d+[.)]\s*|[-*]\s+)?Preencher:", re.I)
 _MARCADOR_DE_LISTA = re.compile(r"^\s*(?:\d+[.)]|[-*])\s+")
 _INDICACAO_DE_USO = "usar somente após a execução"
+_ABRE_DOCUMENTS = re.compile(r"^\s*<documents>\s*", re.I)
+_FECHA_DOCUMENTS = re.compile(r"\s*</documents>\s*$", re.I)
 
 
 def _sem_bordas(linhas: list[str]) -> list[str]:
@@ -27,6 +29,17 @@ def _sem_bordas(linhas: list[str]) -> list[str]:
 def _fim_da_secao(linhas: list[str], inicio: int, parar_em_subsecao: bool = False) -> int:
     padrao = _TITULO_DE_SUBSECAO_OU_SECAO if parar_em_subsecao else _TITULO_DE_SECAO
     return next((i for i in range(inicio + 1, len(linhas)) if padrao.match(linhas[i])), len(linhas))
+
+
+def _sem_marcacao_documents(linhas: list[str], correcoes: list[str]) -> list[str]:
+    """A IA às vezes devolve a análise dentro de "<documents> ... </documents>". No Teams o "<documents>" abre um parágrafo e o
+    primeiro "## Processo" aparece como texto cru."""
+    texto = "\n".join(linhas)
+    sem_marcas = _FECHA_DOCUMENTS.sub("", _ABRE_DOCUMENTS.sub("", texto, count=1), count=1)
+    if sem_marcas == texto:
+        return linhas
+    correcoes.append("Marcação <documents> do começo/fim da análise removida")
+    return sem_marcas.split("\n")
 
 
 def _nivel_das_subsecoes(linhas: list[str], correcoes: list[str]) -> list[str]:
@@ -149,6 +162,7 @@ def corrigir_formato(markdown: str) -> tuple[str, list[str]]:
     """Devolve a análise com o formato corrigido e a lista do que foi corrigido (vazia se nada mudou)."""
     correcoes: list[str] = []
     linhas = markdown.replace("\r\n", "\n").split("\n")
+    linhas = _sem_marcacao_documents(linhas, correcoes)
     linhas = _nivel_das_subsecoes(linhas, correcoes)
     linhas = _remover_preencher_sem_marcador(linhas, correcoes)
     linhas = _formatar_alertas(linhas, correcoes)

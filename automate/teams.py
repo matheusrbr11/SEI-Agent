@@ -9,7 +9,9 @@ Uso (para testar a configuração do .env, sem precisar de uma análise):
 from __future__ import annotations
 
 import logging
+import re
 import sys
+import time
 from pathlib import Path
 
 import requests
@@ -17,6 +19,8 @@ import requests
 logger = logging.getLogger("jupiter.agente.teams")
 
 TIMEOUT_SEGUNDOS = 30
+PAUSAS_ENTRE_TENTATIVAS = (5, 15)  # segundos antes da 2ª e da 3ª tentativa
+_CHAVE_NA_URL = re.compile(r"sig=[^&\s'\")]+")
 _ABERTURA = "SEI-Agent\n\n---\n"  # cabeçalho em texto simples; veja o docstring de montar_mensagem
 
 
@@ -35,18 +39,41 @@ def montar_mensagem(markdown: str, limite: int) -> str:
     return _ABERTURA + texto
 
 
+def _ocultar_chave(texto: str) -> str:
+    """O webhook leva a chave de acesso na URL (`sig=`) e as exceções do `requests` repetem a URL inteira."""
+    return _CHAVE_NA_URL.sub("sig=***", texto)
+
+
+def _passageira(erro: requests.exceptions.RequestException) -> bool:
+    """Vale tentar de novo: falha de rede/SSL, tempo esgotado, servidor com problema ou limite de uso (429)."""
+    resposta = getattr(erro, "response", None)
+    if resposta is not None:
+        return resposta.status_code >= 500 or resposta.status_code == 429
+    return isinstance(erro, (requests.exceptions.ConnectionError, requests.exceptions.Timeout))
+
+
 def enviar(mensagem: str, webhook_url: str, destinatarios: list[str]) -> bool:
-    """POST no webhook do Teams. Devolve False (e registra no log) se falhar; nunca levanta exceção."""
-    try:
-        resposta = requests.post(
-            webhook_url, json={"destinatarios": destinatarios, "mensagem": mensagem}, timeout=TIMEOUT_SEGUNDOS
-        )
-        resposta.raise_for_status()
-    except requests.exceptions.RequestException:
-        logger.error("Erro ao enviar a mensagem ao Teams", exc_info=True)
-        return False
-    logger.info("Mensagem enviada ao Teams para %s. Status: %s", ", ".join(destinatarios), resposta.status_code)
-    return True
+    """POST no webhook do Teams, com até 3 tentativas nas falhas passageiras. Devolve False (e registra no log, sem a chave
+    do webhook) se não conseguir; nunca levanta exceção."""
+    tentativas = len(PAUSAS_ENTRE_TENTATIVAS) + 1
+    for tentativa in range(1, tentativas + 1):
+        try:
+            resposta = requests.post(
+                webhook_url, json={"destinatarios": destinatarios, "mensagem": mensagem}, timeout=TIMEOUT_SEGUNDOS
+            )
+            resposta.raise_for_status()
+        except requests.exceptions.RequestException as erro:
+            motivo = _ocultar_chave(f"{type(erro).__name__}: {erro}")
+            if tentativa < tentativas and _passageira(erro):
+                pausa = PAUSAS_ENTRE_TENTATIVAS[tentativa - 1]
+                logger.warning("Envio ao Teams falhou (tentativa %d de %d), nova tentativa em %ds: %s", tentativa, tentativas, pausa, motivo)
+                time.sleep(pausa)
+                continue
+            logger.error("Erro ao enviar a mensagem ao Teams (tentativa %d de %d): %s", tentativa, tentativas, motivo)
+            return False
+        logger.info("Mensagem enviada ao Teams para %s. Status: %s", ", ".join(destinatarios), resposta.status_code)
+        return True
+    return False
 
 
 def configurado() -> bool:
