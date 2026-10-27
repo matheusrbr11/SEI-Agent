@@ -45,7 +45,7 @@ Para desenvolver e rodar os testes, instale `requirements-dev.txt` no lugar (ele
 
 ## Configuração (`.env`)
 
-Edite o `.env` (copiado de `.env.example`; ele está no `.gitignore`, não o versione nem o compartilhe). A senha do SEI não fica nele: o agente a pergunta a cada execução. Variável ausente = valor padrão.
+Edite o `.env` (copiado de `.env.example`; ele está no `.gitignore`, não o versione nem o compartilhe). A senha do SEI não fica nele: o agente a pergunta a cada execução. Variável ausente ou vazia = valor padrão. Valor que ainda é o texto-modelo do `.env.example` (começa com `<`, como `<seu usuário do SEI>`) conta como não preenchido, e o agente avisa no log quais variáveis estão assim. Número ou `True/False` inválido faz o programa parar na partida, dizendo qual variável está errada.
 
 | Variável | Padrão | Para que serve |
 |---|---|---|
@@ -56,6 +56,7 @@ Edite o `.env` (copiado de `.env.example`; ele está no `.gitignore`, não o ver
 | `SEI_MARCADOR` | `AGENTE - ANALISAR` | Marcador dos processos a analisar, no modo `marcador` |
 | `LIMITE_TEXTO_DOCUMENTO` | `80` | Documento do SEI com menos caracteres que isso é baixado e lido pelo anexo |
 | `HEADLESS` | `False` | `True` roda o navegador sem janela |
+| `TENTATIVAS_MAXIMAS` | `3` | Quantas vezes seguidas um processo pode falhar (coleta ou entrega) antes de o agente parar de tentá-lo sozinho |
 | `SHAREPOINT_PASTA_ENTRADA` | (vazio = não copia) | Pasta `entrada` sincronizada pelo OneDrive |
 | `SHAREPOINT_PASTA_SAIDA` | (vazio = não lê) | Pasta `saida` sincronizada pelo OneDrive |
 | `SAIDA_ESPERA_MINUTOS` | `5` | Quanto esperar, no total, pelas análises do Power Automate |
@@ -69,20 +70,24 @@ Edite o `.env` (copiado de `.env.example`; ele está no `.gitignore`, não o ver
 Teste controlado com um processo:
 
 ```powershell
-python main.py --processo "SEI-040009/001813/2026" --reanalisar
+python main.py --processo "SEI-040009/001813/2026"
 ```
 
-Execução normal pelo marcador configurado:
+Execução normal pelo modo configurado em `SEI_MODO`:
 
 ```powershell
 python main.py
 ```
 
+Opções: `--processo` trabalha só nesse processo e ignora o modo, o marcador e o banco; `--reanalisar` não descarta os processos que o banco já conhece (no modo `novos` isso pega **todo** o Controle de Processos: use com cuidado); `--sem-saida` não espera as análises.
+
+**Código de saída:** `0` se todos os processos foram coletados e entregues (ou não havia nenhum); `1` se a autenticação falhou ou se algum processo teve falha de coleta ou de entrega nesta execução. Um processo que o agente já desistiu de tentar (veja "Banco de dados") não conta como falha da execução, mas aparece no `python -m banco.relatorio`. Análise com `ERRO` de validação não altera o código de saída do `main.py`: ela é entregue ao Teams e fica no relatório `.validacao.txt`.
+
 Com `SHAREPOINT_PASTA_SAIDA` configurada, depois de entregar os JSONs ao SharePoint o agente **fecha o navegador** e fica aguardando as análises dos processos entregues aparecerem na pasta de saída (até `SAIDA_ESPERA_MINUTOS`, padrão 5, olhando a cada `SAIDA_INTERVALO_SEGUNDOS`, padrão 20). Só são analisadas as análises **novas dos processos desta execução**: o que já estava na pasta antes de começar (mesmo do mesmo processo) e as análises de outros processos são ignorados, sem serem corrigidos, validados nem enviados. Se o processo já tem análise na pasta, o agente espera a versão nova dele (uma versão é nova quando o conteúdo é diferente). Cada análise que chega é corrigida e validada na hora (veja "Leitura da saída") e o resultado vai para `automate/saida`. As que não chegarem a tempo viram um aviso no log, e `python -m automate.saidas` pega depois. `Ctrl+C` encerra só a espera. Para pular tudo isso: `python main.py --sem-saida`.
 
 ## Envio ao SharePoint (sem API REST)
 
-A pasta `5 - Automação/05 - Agente/entrada` do site SUBTES está sincronizada no OneDrive. Preencha `SHAREPOINT_PASTA_ENTRADA` no `.env` com o caminho local dessa pasta (ex.: `C:\Users\<usuario>\OneDrive - SEFAZ-RJ\SUBTES - SUPCONC\5 - Automação\05 - Agente\entrada`). Depois de gerar `automate/entrada/ENTRADA_*.json`, o agente copia o arquivo para essa pasta e o cliente do OneDrive faz o upload; o fluxo é disparado pelo arquivo novo. Se a pasta não existir (OneDrive fechado/não sincronizado) ou a cópia falhar, o processo fica com status `erro_envio` e é reenviado na próxima execução. Variável vazia = não copia.
+A pasta `5 - Automação/05 - Agente/entrada` do site SUBTES está sincronizada no OneDrive. Preencha `SHAREPOINT_PASTA_ENTRADA` no `.env` com o caminho local dessa pasta (ex.: `C:\Users\<usuario>\OneDrive - SEFAZ-RJ\SUBTES - SUPCONC\5 - Automação\05 - Agente\entrada`). Depois de gerar `automate/entrada/ENTRADA_*.json`, o agente copia o arquivo para essa pasta e o cliente do OneDrive faz o upload; o fluxo é disparado pelo arquivo novo. Se a pasta não existir (OneDrive fechado/não sincronizado) ou a cópia falhar, o processo fica com status `erro_envio` e é reenviado na próxima execução **sem ser coletado de novo**: o JSON já gerado é reaproveitado (se o arquivo ainda existir). Variável vazia = não copia.
 
 ## Leitura da saída (análises do Power Automate)
 
@@ -96,6 +101,7 @@ python -m automate.saidas --arquivo ANALISE_X.md
 
 Para cada `.md` o agente acha o JSON de entrada pelo número da seção "Processo" (o nome do arquivo não precisa trazê-lo), corrige o que é só **formato** ou **nome de unidade** e confere o resto com o `validador`:
 
+- a marcação `<documents>` ... `</documents>` que a IA às vezes põe em volta da análise é removida (no Teams ela fazia o `## Processo` aparecer como texto cru);
 - `## Roteiro` / `## Despacho` viram `###` dentro de Proposta;
 - linhas "Preencher:" sem nenhum `[PREENCHER]` na análise saem dos Alertas;
 - alertas ganham `- ` e uma linha em branco entre eles;
@@ -115,7 +121,35 @@ A configuração fica no `.env` (modelo em `.env.example`). A URL do webhook con
 
 Sem webhook ou sem destinatário, nada é enviado.
 
-No `main.py`, só vai ao Teams a análise **nova** dos processos daquela execução (as demais da pasta de saída nem são analisadas). Já `python -m automate.saidas` envia toda análise nova que encontrar. `--refazer` e `--sem-teams` não enviam. Para conferir a configuração sem uma análise, rode `python -m automate.teams --teste`, que manda uma mensagem de teste aos destinatários. Falha no envio é registrada no log e nunca interrompe a coleta. Os testes nunca enviam mensagens de verdade (`tests/conftest.py` desliga o Teams).
+No `main.py`, só vai ao Teams a análise **nova** dos processos daquela execução (as demais da pasta de saída nem são analisadas). Já `python -m automate.saidas` envia toda análise nova que encontrar. `--refazer` e `--sem-teams` não enviam. Para conferir a configuração sem uma análise, rode `python -m automate.teams --teste`, que manda uma mensagem de teste aos destinatários. Falha de rede, de certificado SSL, do servidor (5xx) ou limite de uso (429) é tentada até 3 vezes (pausas de 5 e 15 s); erro 4xx não é repetido. Se nenhuma tentativa funcionar, o erro vai para o log (sem a chave `sig=` do webhook, que é ocultada) e nunca interrompe a coleta; o banco guarda `teams_enviado = 0`, e `python -m automate.saidas --arquivo X.md` reenvia. Os testes nunca enviam mensagens de verdade (`tests/conftest.py` desliga o Teams).
+
+## Banco de dados (`banco/agente.db`)
+
+Três tabelas, criadas e atualizadas sozinhas (o banco antigo é migrado na primeira execução, sem perder as linhas):
+
+- `processos`: uma linha por processo, com o estado atual. É ela que decide o que o agente pega na próxima execução.
+- `execucoes`: uma linha por execução (`main.py` ou `automate.saidas`), com início, fim, modo, totais (selecionados, exportados, falhas, análises) e o código de saída. Uma execução sem `fim` indica que o programa caiu.
+- `historico`: uma linha por acontecimento (selecionado, coleta, JSON gerado ou reaproveitado, entrega, análise, Teams, desistência), só acrescentada, nunca sobrescrita. Guarda mensagens curtas, nunca conteúdo de processo.
+
+Status em `processos`:
+
+| Status | Significa | O agente pega de novo? |
+|---|---|---|
+| `baseline` | Já existia na primeira execução do modo `novos` | Não |
+| `exportado` | JSON gerado e entregue (ou o JSON ficou só local, se `SHAREPOINT_PASTA_ENTRADA` estiver vazia) | Não |
+| `analisado` | A análise chegou e foi corrigida e validada; o caminho do `.md` fica em `arquivo_saida` e, se a validação teve `ERRO`, o resumo vai em `erro` | Não |
+| `erro_coleta` | A coleta no SEI falhou | Sim, até `TENTATIVAS_MAXIMAS` falhas seguidas |
+| `erro_envio` | O JSON foi gerado, mas a cópia para o SharePoint falhou | Sim, reaproveitando o JSON, até o mesmo teto |
+
+A coluna `falhas_seguidas` conta os erros desde o último sucesso. Ao chegar a `TENTATIVAS_MAXIMAS`, o agente deixa o processo de lado, registra o aviso e o evento `desistiu`; para tentar de novo, use `--processo`. Um novo `exportado` começa um ciclo novo: os dados da análise anterior saem da linha, mas continuam no `historico`.
+
+Para consultar sem abrir o SQLite:
+
+```powershell
+python -m banco.relatorio                                         # status, pendentes, desistências e últimas execuções
+python -m banco.relatorio --processo "SEI-040009/001847/2026"     # o histórico de um processo
+python -m banco.relatorio --horas 4 --execucoes 20                # pendentes há mais de 4 h; 20 execuções
+```
 
 ## Pastas
 
@@ -123,7 +157,7 @@ No `main.py`, só vai ao Teams a análise **nova** dos processos daquela execuç
 - `automate/saida`: análises já corrigidas e conferidas pelo agente (veja "Leitura da saída" abaixo), cada uma com seu `.validacao.txt`.
 - `automate/erros`: reservada para registros de falha do fluxo; o agente só cria a pasta e não grava nada nela.
 - `downloads`: anexos baixados durante a coleta. A pasta de cada processo é apagada assim que o JSON de entrada é gerado. Só sobra ali o que pertence a processos cuja coleta falhou (anexos e o diagnóstico da árvore, com HTML e print de tela), para investigação; apague-o depois.
-- `banco/agente.db`: checkpoint local (SQLite) com o status de cada processo (`exportado`, `erro_coleta`, `erro_envio`...). É ele que impede o agente de exportar de novo um processo já exportado; use `--reanalisar` para ignorá-lo.
+- `banco/agente.db`: banco SQLite do agente (veja "Banco de dados").
 - `logs/execução`: logs das execuções do agente (e, em `erros`, só os de nível ERROR). `logs/tests`: logs das rodadas de `pytest` (um arquivo por rodada, e em `erros` o de nível ERROR); os testes nunca gravam em `logs/execução`.
 
 ## Configuração do Power Automate
@@ -138,3 +172,5 @@ pytest -q
 ```
 
 Os testes não usam o SEI, o Teams nem o OneDrive de verdade. O log de cada rodada vai para `logs/tests`.
+
+`tests/test_prompt.py` confere que o `prompt.md` continua de acordo com o validador (as 9 seções na ordem, `### Roteiro` e `### Despacho`, e os tipos de providência, competências e situações de resposta). Se ele falhar, o prompt e o `automate/validador.py` se afastaram: atualize um dos dois. Ele só enxerga o `prompt.md` deste repositório, então mantenha-o como cópia fiel do prompt que está no Power Automate.
