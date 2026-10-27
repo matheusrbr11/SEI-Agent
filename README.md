@@ -43,13 +43,25 @@ Copy-Item .env.example .env
 
 Para desenvolver e rodar os testes, instale `requirements-dev.txt` no lugar (ele inclui o `requirements.txt` e acrescenta o `pytest`). As versões do `requirements.txt` estão fixadas; só a `jupiter-subtes` fica com `>=`, porque é uma biblioteca interna, atualizada à parte (`pip install --upgrade jupiter-subtes`).
 
+## Senha do SEI
+
+A senha fica no **Gerenciador de Credenciais do Windows** (biblioteca `keyring`), criptografada e ligada ao usuário do Windows que a cadastrou. Ela nunca vai para o `.env`, o banco nem os logs. Cadastre uma vez, com `SEI_USUARIO` preenchido no `.env`:
+
+```
+python -m sei.credenciais --cadastrar   # pede a senha duas vezes e guarda; também serve para trocá-la
+python -m sei.credenciais --verificar   # diz se há senha guardada, sem mostrá-la
+python -m sei.credenciais --apagar
+```
+
+Na execução, o agente usa a senha guardada. Sem ela, **só pergunta se houver alguém no terminal**; em execução agendada, sem terminal, ele termina com código `1` e o log diz como cadastrar. Quando a senha do SEI mudar, rode `--cadastrar` de novo. No Agendador de Tarefas, a tarefa precisa rodar **com o mesmo usuário do Windows** que cadastrou a senha, e não funciona como `SYSTEM`.
+
 ## Configuração (`.env`)
 
-Edite o `.env` (copiado de `.env.example`; ele está no `.gitignore`, não o versione nem o compartilhe). A senha do SEI não fica nele: o agente a pergunta a cada execução. Variável ausente ou vazia = valor padrão. Valor que ainda é o texto-modelo do `.env.example` (começa com `<`, como `<seu usuário do SEI>`) conta como não preenchido, e o agente avisa no log quais variáveis estão assim. Número ou `True/False` inválido faz o programa parar na partida, dizendo qual variável está errada.
+Edite o `.env` (copiado de `.env.example`; ele está no `.gitignore`, não o versione nem o compartilhe). A senha do SEI não fica nele: veja "Senha do SEI" abaixo. Variável ausente ou vazia = valor padrão. Valor que ainda é o texto-modelo do `.env.example` (começa com `<`, como `<seu usuário do SEI>`) conta como não preenchido, e o agente avisa no log quais variáveis estão assim. Número ou `True/False` inválido faz o programa parar na partida, dizendo qual variável está errada.
 
 | Variável | Padrão | Para que serve |
 |---|---|---|
-| `SEI_USUARIO` | (pergunta ao executar) | Usuário do SEI |
+| `SEI_USUARIO` | (pergunta ao executar, se houver alguém no terminal) | Usuário do SEI; também é a chave da senha guardada no Windows |
 | `SEI_ORGAO` | `SEFAZ` | Órgão no login |
 | `SEI_UNIDADE` | `SUPCONFI` | Unidade em que o agente trabalha |
 | `SEI_MODO` | `marcador` | `marcador` (processos com o marcador abaixo) ou `novos` (processos que surgirem depois da primeira execução) |
