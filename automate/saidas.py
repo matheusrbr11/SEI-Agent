@@ -55,28 +55,22 @@ class Resultado:
 
 
 def registrar_no_banco(controle: ControleProcessos, resultado: Resultado, teams_enviado: bool | None = None) -> bool:
-    """Marca no banco que a análise do processo chegou (`analisado`) e acrescenta os eventos ao historico.
+    """Marca no banco que a análise do processo chegou (`analisado`) e a acrescenta ao historico, com os erros e avisos.
 
     A análise com ERRO de validação também conta como `analisado`: o processo não deve ser coletado de novo por causa
     disso. O resumo dos ERROs fica na coluna `erro`, e as contagens em `validacao_erros` e `validacao_avisos`.
     `teams_enviado` é None se o envio ao Teams nem foi tentado. False se o processo não está no banco (ou a análise
-    não traz o número); o historico recebe os eventos de qualquer forma.
+    não traz o número); o historico recebe a análise de qualquer forma.
     """
+    controle.registrar_no_historico(resultado.numero, resultado.arquivo, resultado.problemas)
     if not resultado.numero:
         return False
     erros, avisos = len(resultado.erros), len(resultado.avisos)
     resumo = f"Validação: {erros} ERRO(s)" if erros else None
-    atualizou = controle.registrar_analise(
+    return controle.registrar_analise(
         resultado.numero, resultado.corrigido, resumo,
         validacao_erros=erros, validacao_avisos=avisos, teams_enviado=teams_enviado,
     )
-    controle.registrar_evento(
-        resultado.numero, "analise", "erro" if erros else "aviso" if avisos else "ok",
-        f"{resultado.arquivo}: {erros} ERRO(s), {avisos} AVISO(s)",
-    )
-    if teams_enviado is not None:
-        controle.registrar_evento(resultado.numero, "teams", "ok" if teams_enviado else "erro")
-    return atualizou
 
 
 def numero_do_processo(markdown: str) -> str | None:
