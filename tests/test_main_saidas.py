@@ -279,7 +279,7 @@ def test_main_mantem_o_banco_aberto_ate_depois_da_espera(tmp_path, monkeypatch):
     assert fechado  # e só é fechado no fim da execução
 
 
-def test_resultado_do_teams_e_os_eventos_da_analise_vao_para_o_banco(tmp_path, monkeypatch):
+def test_resultado_do_teams_e_a_analise_vao_para_o_banco(tmp_path, monkeypatch):
     pasta_saida, _ = _configurar(monkeypatch, tmp_path)
     _analise_na_saida(tmp_path, pasta_saida)
     monkeypatch.setattr(main.teams, "configurado", lambda: True)
@@ -288,8 +288,9 @@ def test_resultado_do_teams_e_os_eventos_da_analise_vao_para_o_banco(tmp_path, m
     controle.iniciar_execucao("marcador")
     main.processar_saidas(["SEI-040005/000729/2026"], set(), controle)
     assert controle.linha("SEI-040005/000729/2026")["teams_enviado"] == 0
-    eventos = [(etapa, resultado) for _, _, etapa, resultado, _ in controle.historico_do_processo("SEI-040005/000729/2026")]
-    assert eventos == [("analise", "ok"), ("teams", "erro")]
+    assert [(arquivo, tipo) for _, _, _, arquivo, tipo, _ in controle.historico_do_processo("SEI-040005/000729/2026")] == [
+        ("ANALISE_X.md", "ok")
+    ]
     controle.fechar()
 
 
@@ -299,5 +300,5 @@ def test_teams_desligado_deixa_teams_enviado_vazio(tmp_path, monkeypatch):
     controle = _banco_com(tmp_path)
     main.processar_saidas(["SEI-040005/000729/2026"], set(), controle)
     assert controle.linha("SEI-040005/000729/2026")["teams_enviado"] is None
-    assert [e[2] for e in controle.historico_do_processo("SEI-040005/000729/2026")] == ["analise"]
+    assert len(controle.historico_do_processo("SEI-040005/000729/2026")) == 1
     controle.fechar()

@@ -244,5 +244,5 @@ def test_linha_de_comando_registra_a_execucao_e_o_historico(tmp_path, monkeypatc
     banco = ControleProcessos(config.CAMINHO_BANCO)
     (execucao,) = banco.execucoes_recentes()
     assert execucao[3] == "saidas" and execucao[7] == 1 and execucao[8] == 0  # modo, análises, código de saída
-    assert [e[2:4] for e in banco.historico_do_processo(numero)] == [("analise", "ok")]
+    assert [e[3:] for e in banco.historico_do_processo(numero)] == [("OK.md", "ok", None)]
     banco.fechar()

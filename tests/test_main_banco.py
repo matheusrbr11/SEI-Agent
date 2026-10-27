@@ -1,4 +1,4 @@
-"""O fluxo do main() com o banco: falhas, código de saída, reaproveitamento do JSON, teto de tentativas e diário."""
+"""O fluxo do main() com o banco: falhas, código de saída, reaproveitamento do JSON, teto de tentativas e totais da execução."""
 import argparse
 
 import pytest
@@ -80,14 +80,6 @@ def _linha(numero="P1"):
         banco.fechar()
 
 
-def _etapas(numero="P1"):
-    banco = _banco()
-    try:
-        return [(etapa, resultado) for _, _, etapa, resultado, _ in banco.historico_do_processo(numero)]
-    finally:
-        banco.fechar()
-
-
 def _ultima_execucao():
     banco = _banco()
     try:
@@ -98,10 +90,9 @@ def _ultima_execucao():
 
 # --- sucesso
 
-def test_execucao_sem_falhas_devolve_0_e_registra_o_diario(preparar):
+def test_execucao_sem_falhas_devolve_0_e_registra_a_execucao(preparar):
     assert preparar(SEIFalso()) == 0
     assert _linha()["status"] == "exportado" and _linha()["falhas_seguidas"] == 0
-    assert _etapas() == [("selecionado", "ok"), ("coleta", "ok"), ("json_gerado", "ok"), ("entrega", "ok")]
     _, _, fim, modo, selecionados, exportados, falhas, analises, codigo = _ultima_execucao()
     assert fim and modo == "marcador" and (selecionados, exportados, falhas, analises, codigo) == (1, 1, 0, 0, 0)
 
@@ -109,7 +100,7 @@ def test_execucao_sem_falhas_devolve_0_e_registra_o_diario(preparar):
 def test_sem_pasta_do_sharepoint_o_json_nao_e_copiado_mas_nao_e_falha(preparar):
     assert preparar(SEIFalso(), sharepoint_configurado=False) == 0
     assert _linha()["status"] == "exportado"
-    assert ("entrega", "aviso") in _etapas()
+    assert _ultima_execucao()[4:7] == (1, 1, 0)  # selecionados, exportados, falhas
 
 
 # --- falhas e código de saída
@@ -119,7 +110,6 @@ def test_falha_na_coleta_devolve_1_e_fica_registrada(preparar, falha):
     assert preparar(SEIFalso(falha=falha)) == 1
     linha = _linha()
     assert linha["status"] == "erro_coleta" and linha["falhas_seguidas"] == 1 and linha["erro"]
-    assert _etapas() == [("selecionado", "ok"), ("coleta", "erro")]
     assert _ultima_execucao()[6:] == (1, 0, 1)  # falhas, análises, código de saída
 
 
@@ -127,7 +117,7 @@ def test_falha_na_entrega_devolve_1_e_guarda_o_json_para_depois(preparar):
     assert preparar(SEIFalso(), onedrive=False) == 1
     linha = _linha()
     assert linha["status"] == "erro_envio" and linha["arquivo_entrada"] and linha["falhas_seguidas"] == 1
-    assert _etapas() == [("selecionado", "ok"), ("coleta", "ok"), ("json_gerado", "ok"), ("entrega", "erro")]
+    assert _ultima_execucao()[4:7] == (1, 0, 1)
 
 
 def test_falha_de_autenticacao_devolve_1_e_a_execucao_fica_registrada(preparar):
@@ -151,8 +141,7 @@ def test_reenvio_reaproveita_o_json_sem_coletar_de_novo(preparar):
     assert sei.coletados == ["P1"]  # não coletou outra vez
     linha = _linha()
     assert linha["status"] == "exportado" and linha["falhas_seguidas"] == 0
-    etapas = [etapa for etapa, _ in _etapas()]
-    assert etapas[-3:] == ["selecionado", "json_reaproveitado", "entrega"]
+    assert _ultima_execucao()[4:7] == (1, 1, 0)
 
 
 def test_json_que_sumiu_obriga_a_coletar_de_novo(preparar):
@@ -171,7 +160,6 @@ def test_reanalisar_e_processo_sempre_coletam_de_novo(preparar, opcoes):
     preparar(sei, onedrive=False)
     assert preparar(sei, onedrive=True, **opcoes) == 0
     assert sei.coletados == ["P1", "P1"]
-    assert "json_reaproveitado" not in [etapa for etapa, _ in _etapas()]
 
 
 # --- teto de tentativas
@@ -184,7 +172,7 @@ def test_processo_que_falhou_demais_e_ignorado_ate_ser_pedido(preparar):
 
     assert preparar(sei) == 0  # ignorado, e por isso não é uma falha desta execução
     assert sei.coletados == ["P1"] * 3
-    assert _etapas()[-1] == ("desistiu", "aviso")
+    assert _ultima_execucao()[4:7] == (0, 0, 0)  # nada selecionado: o processo foi ignorado
 
     assert preparar(sei, processo="P1") == 1  # pedido explicitamente: tenta de novo
     assert sei.coletados == ["P1"] * 4
