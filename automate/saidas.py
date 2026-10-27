@@ -24,6 +24,7 @@ from automate import teams
 from automate.correcao import corrigir_formato
 from automate.extracao import usar_nome_atual
 from automate.validador import validar_saida
+from sei.modelos import nome_seguro
 
 _PROCESSO = re.compile(r"^##\s+Processo\s*$", re.I | re.M)
 _ROTULO_DA_IMPRESSAO = "Impressão digital da análise original (SHA-1): "
@@ -52,10 +53,6 @@ class Resultado:
         return "ERRO" if self.erros else "AVISO" if self.avisos else "OK"
 
 
-def _nome_seguro(numero: str) -> str:
-    return numero.replace("/", "_").replace(" ", "_")
-
-
 def numero_do_processo(markdown: str) -> str | None:
     """Número do processo, na primeira linha com texto depois do título "## Processo"."""
     achado = _PROCESSO.search(markdown)
@@ -68,7 +65,7 @@ def numero_do_processo(markdown: str) -> str | None:
 
 
 def localizar_entrada(numero: str, pastas: list[Path | None]) -> Path | None:
-    nome = f"ENTRADA_{_nome_seguro(numero)}.json"
+    nome = f"ENTRADA_{nome_seguro(numero)}.json"
     return next((pasta / nome for pasta in pastas if pasta and (pasta / nome).is_file()), None)
 
 
@@ -81,7 +78,7 @@ def _conferir(corrigido: str, resultado: Resultado, pastas_entrada: list[Path | 
     caminho = localizar_entrada(resultado.numero, pastas_entrada)
     if caminho is None:
         resultado.problemas.append(
-            f"ERRO: JSON de entrada não encontrado: ENTRADA_{_nome_seguro(resultado.numero)}.json"
+            f"ERRO: JSON de entrada não encontrado: ENTRADA_{nome_seguro(resultado.numero)}.json"
         )
         return corrigido
     resultado.entrada = str(caminho)
@@ -154,7 +151,7 @@ def processar_pasta(
     analisados de jeito nenhum (o que já estava na pasta). `apenas_processos`: se informado, só as análises desses
     processos são analisadas; as demais da pasta são deixadas de lado."""
     candidatos = [pasta_saida / arquivo] if arquivo else sorted(pasta_saida.glob("*.md"))
-    desejados = None if apenas_processos is None else {_nome_seguro(numero) for numero in apenas_processos}
+    desejados = None if apenas_processos is None else {nome_seguro(numero) for numero in apenas_processos}
     resultados = []
     for origem in candidatos:
         try:
@@ -166,7 +163,7 @@ def processar_pasta(
                 continue
             if desejados is not None:
                 numero = numero_do_processo(origem.read_text(encoding="utf-8-sig"))
-                if not numero or _nome_seguro(numero) not in desejados:
+                if not numero or nome_seguro(numero) not in desejados:
                     continue
             if not refazer and not arquivo and _ja_processada(origem, destino):
                 continue
@@ -208,7 +205,7 @@ def aguardar_e_processar(
     SHA-1), mesmo do mesmo processo, e as análises de outros processos são deixadas de lado. Devolve (resultados,
     processos que não chegaram a tempo).
     """
-    pendentes = {_nome_seguro(numero): numero for numero in aguardados}
+    pendentes = {nome_seguro(numero): numero for numero in aguardados}
     resultados: list[Resultado] = []
     limite = relogio() + espera_maxima
     while True:
@@ -221,7 +218,7 @@ def aguardar_e_processar(
             if ao_processar:
                 ao_processar(resultado)
             if resultado.numero:
-                pendentes.pop(_nome_seguro(resultado.numero), None)
+                pendentes.pop(nome_seguro(resultado.numero), None)
         restante = limite - relogio()
         if not pendentes or restante <= 0:
             return resultados, sorted(pendentes.values())

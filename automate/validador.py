@@ -308,10 +308,16 @@ def _conferir_informacoes(corpo: str, pre: dict) -> list[str]:
         if manifestacoes.casefold().rstrip(".") != "nenhuma":
             problemas.append("ERRO: não há manifestação nossa no processo, mas o item Manifestações anteriores diz outra coisa")
     else:
-        problemas += [
-            f"AVISO: a manifestação nossa de ordem {m['ordem']} não aparece em Manifestações anteriores"
-            for m in pre["manifestacoes_nossas"] if f"{m['ordem']} - {m['nome']}" not in manifestacoes
+        ausentes = [
+            m["ordem"] for m in pre["manifestacoes_nossas"] if f"{m['ordem']} - {m['nome']}" not in manifestacoes
         ]
+        if len(ausentes) == 1:
+            problemas.append(f"AVISO: a manifestação nossa de ordem {ausentes[0]} não aparece em Manifestações anteriores")
+        elif ausentes:  # um aviso só, em vez de um por manifestação: processos longos têm dezenas delas
+            problemas.append(
+                f"AVISO: {len(ausentes)} manifestações nossas não aparecem em Manifestações anteriores "
+                f"(ordens {', '.join(map(str, ausentes))})"
+            )
         if "resposta da supconfi" in manifestacoes.casefold():
             problemas.append("ERRO: 'resposta da SUPCONFI' não é tipo de documento; use o tipo real (despacho, ofício etc.)")
     prazo = _item(itens, "prazo")

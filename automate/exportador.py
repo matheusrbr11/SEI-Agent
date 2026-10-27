@@ -9,7 +9,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from automate.extracao import data_assinatura, destinatarios, dominios_de_email, prazos_no_texto, usar_nome_atual_em
-from sei.modelos import DocumentoSEI, ProcessoSEI
+from sei.modelos import DocumentoSEI, ProcessoSEI, nome_seguro
 
 SCHEMA_VERSION = "1.2"
 
@@ -34,10 +34,6 @@ UNIDADE_NAO_INFORMADA = "Unidade não informada"
 DOCUMENTO_EXTERNO = "documento externo"
 PAPEL_RESPOSTA_NOSSA = "resposta da SUPCONFI"
 PAPEL_PEDIDO_A_NOS = "pedido à SUPCONFI"
-
-
-def _nome_seguro(numero: str) -> str:
-    return numero.replace("/", "_").replace(" ", "_")
 
 
 def _normalizar(texto: str | None) -> str:
@@ -365,7 +361,7 @@ def preparar_para_automate(processo: ProcessoSEI) -> dict:
 def exportar_para_automate(processo: ProcessoSEI, pasta: Path) -> Path:
     pasta = Path(pasta)
     pasta.mkdir(parents=True, exist_ok=True)
-    destino = pasta / f"ENTRADA_{_nome_seguro(processo.numero)}.json"
+    destino = pasta / f"ENTRADA_{nome_seguro(processo.numero)}.json"
     temporario = destino.with_suffix(".tmp")
     temporario.write_text(
         json.dumps(preparar_para_automate(processo), ensure_ascii=False, indent=2),
