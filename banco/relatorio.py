@@ -1,15 +1,16 @@
 """Consulta ao banco do agente, sem precisar abrir o SQLite.
 
 Uso:
-    python -m banco.relatorio                      # status, pendentes, desistências e últimas execuções
-    python -m banco.relatorio --processo "SEI-040009/001847/2026"   # o histórico de um processo
-    python -m banco.relatorio --horas 4 --execucoes 20
+    python -m banco.relatorio                      # status, pendentes, desistências, últimas análises e execuções
+    python -m banco.relatorio --processo "SEI-040009/001847/2026"   # as análises de um processo
+    python -m banco.relatorio --horas 4 --execucoes 20 --analises 30
 """
 from __future__ import annotations
 
 import argparse
 import sys
 from datetime import datetime
+from itertools import groupby
 
 from banco.controle import ControleProcessos
 
@@ -25,9 +26,28 @@ def _horas_desde(texto: str, agora: datetime) -> str:
     return f"{horas:.1f} h"
 
 
+def _analises(linhas: list[tuple], com_numero: bool) -> list[str]:
+    """Texto das análises, a partir das linhas do historico (uma por erro ou aviso): um cabeçalho por análise, com o
+    resultado dela, e embaixo os erros e avisos. `linhas` vem agrupado por análise (primeiro campo)."""
+    texto = []
+    for _, grupo in groupby(linhas, key=lambda linha: linha[0]):
+        grupo = list(grupo)
+        if com_numero:
+            _, em, execucao, numero, arquivo, *_ = grupo[0]
+        else:
+            _, em, execucao, arquivo, *_ = grupo[0]
+            numero = None
+        tipos = {linha[-2] for linha in grupo}
+        resultado = "erro" if "erro" in tipos else "aviso" if "aviso" in tipos else "ok"
+        quem = f"{numero or _SEM_DADO}  " if com_numero else ""
+        texto.append(f"  {_hora(em)}  {quem}{resultado}  ({arquivo}, exec #{execucao or _SEM_DADO})")
+        texto += [f"      {linha[-2].upper()}: {linha[-1]}" for linha in grupo if linha[-2] != "ok"]
+    return texto
+
+
 def montar_relatorio(
     controle: ControleProcessos, tentativas_maximas: int, horas: float = 1, execucoes: int = 10,
-    agora: datetime | None = None,
+    agora: datetime | None = None, analises: int = 10,
 ) -> str:
     agora = agora or datetime.now()
     linhas = ["PROCESSOS POR STATUS"]
@@ -41,6 +61,9 @@ def montar_relatorio(
     desistiram = controle.desistiram(tentativas_maximas)
     linhas += ["", f"DESISTIRAM ({tentativas_maximas} FALHAS SEGUIDAS; o agente não tenta mais sozinho, use --processo)"]
     linhas += [f"  {numero}  {status}, {falhas} falhas: {erro or _SEM_DADO}" for numero, status, falhas, erro in desistiram] or ["  nenhum"]
+
+    linhas += ["", f"ÚLTIMAS {analises} ANÁLISES"]
+    linhas += _analises(controle.analises_recentes(analises), com_numero=True) or ["  nenhuma"]
 
     linhas += ["", f"ÚLTIMAS {execucoes} EXECUÇÕES"]
     for id_, inicio, fim, modo, selecionados, exportados, falhas, analises, codigo in controle.execucoes_recentes(execucoes):
@@ -56,24 +79,21 @@ def montar_relatorio(
 
 
 def montar_historico(controle: ControleProcessos, numero: str) -> str:
-    eventos = controle.historico_do_processo(numero)
-    cabecalho = [f"HISTÓRICO DE {numero}"]
-    if not eventos:
-        return "\n".join(cabecalho + ["  nenhum evento registrado"]) + "\n"
-    return "\n".join(
-        cabecalho
-        + [f"  {_hora(em)}  exec #{execucao or _SEM_DADO}  {etapa}  {resultado}  {detalhe or ''}".rstrip()
-           for em, execucao, etapa, resultado, detalhe in eventos]
-    ) + "\n"
+    analises = controle.historico_do_processo(numero)
+    linhas = [f"ANÁLISES DE {numero}"]
+    if not analises:
+        return "\n".join(linhas + ["  nenhuma análise registrada"]) + "\n"
+    return "\n".join(linhas + _analises(analises, com_numero=False)) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
     import config
 
     parser = argparse.ArgumentParser(description="Consulta o banco do agente.")
-    parser.add_argument("--processo", help="Mostra o histórico desse processo.")
+    parser.add_argument("--processo", help="Mostra as análises desse processo.")
     parser.add_argument("--horas", type=float, default=1, help="Pendentes: exportados há mais de N horas (padrão 1).")
     parser.add_argument("--execucoes", type=int, default=10, help="Quantas execuções listar (padrão 10).")
+    parser.add_argument("--analises", type=int, default=10, help="Quantas análises listar (padrão 10).")
     args = parser.parse_args(argv)
     if not config.CAMINHO_BANCO.is_file():
         print(f"Banco não encontrado: {config.CAMINHO_BANCO}")
@@ -83,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.processo:
             print(montar_historico(controle, args.processo), end="")
         else:
-            print(montar_relatorio(controle, config.TENTATIVAS_MAXIMAS, args.horas, args.execucoes), end="")
+            print(montar_relatorio(controle, config.TENTATIVAS_MAXIMAS, args.horas, args.execucoes, analises=args.analises), end="")
     finally:
         controle.fechar()
     return 0
