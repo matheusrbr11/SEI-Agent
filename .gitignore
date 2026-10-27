@@ -1,0 +1,33 @@
+# Segredos e configuração local (modelo: .env.example)
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.coverage
+htmlcov/
+
+# Estado local do agente
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Dados gerados: podem conter documentos sigilosos do SEI
+logs/
+downloads/
+automate/entrada/
+automate/saida/
+automate/erros/
+
+# Editor, Claude Code e sistema operacional
+.vscode/
+.idea/
+.claude/
+~$*
+Thumbs.db
+desktop.ini
