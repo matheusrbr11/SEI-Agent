@@ -13,6 +13,7 @@ from jupiter import configurar_log
 from automate import saidas, teams
 from automate.exportador import copiar_para_sharepoint, exportar_para_automate
 from banco.controle import ControleProcessos
+from sei import credenciais
 from sei.sei_service import SEIService
 
 log = logging.getLogger("jupiter.agente.main")
@@ -32,6 +33,28 @@ def _avisar_texto_modelo() -> None:
             "Variáveis do .env ainda com o texto-modelo do .env.example (ignoradas): %s",
             ", ".join(config.VARIAVEIS_COM_TEXTO_MODELO),
         )
+
+
+def _interativo() -> bool:
+    """Há alguém no terminal para digitar? No Agendador de Tarefas, não."""
+    return sys.stdin is not None and sys.stdin.isatty()
+
+
+def obter_credenciais() -> tuple[str, str] | None:
+    """(usuário, senha) do SEI. A senha vem do Gerenciador de Credenciais do Windows; sem ela, e só com alguém no terminal,
+    é perguntada. Devolve None (com o motivo no log) se faltar algum dos dois e não houver quem digite."""
+    usuario = config.SEI_USUARIO or (input("Usuário SEI: ").strip() if _interativo() else "")
+    if not usuario:
+        log.error("Sem usuário do SEI: preencha SEI_USUARIO no .env.")
+        return None
+    senha = credenciais.obter(usuario)
+    if senha:
+        log.info("Senha do SEI lida do Gerenciador de Credenciais.")
+        return usuario, senha
+    if not _interativo():
+        log.error("Sem senha do SEI guardada para '%s' e ninguém no terminal para digitá-la. Cadastre com: python -m sei.credenciais --cadastrar", usuario)
+        return None
+    return usuario, getpass.getpass("Senha SEI: ")
 
 
 def argumentos():
@@ -194,8 +217,10 @@ def main():
     _configurar_log()
     _avisar_texto_modelo()
     args = argumentos()
-    usuario = config.SEI_USUARIO or input("Usuário SEI: ").strip()
-    senha = getpass.getpass("Senha SEI: ")
+    credencial = obter_credenciais()
+    if credencial is None:
+        return 1
+    usuario, senha = credencial
     antes = saidas.impressoes_existentes(config.SHAREPOINT_PASTA_SAIDA)  # o que já estava na saída antes desta execução
     entregues = []  # processos cujo JSON foi copiado para o SharePoint: as análises deles virão da pasta de saída
     sei = SEIService(config.PASTA_DOWNLOADS, config.LIMITE_TEXTO_DOCUMENTO, config.HEADLESS)
@@ -207,7 +232,7 @@ def main():
     try:  # o banco fica aberto até o fim da espera: cada análise que chega atualiza a linha do processo
         try:
             if not sei.autenticar(usuario, senha, config.SEI_ORGAO, config.SEI_UNIDADE):
-                log.error("Não foi possível autenticar no SEI.")
+                log.error("Não foi possível autenticar no SEI. Se a senha mudou, atualize-a: python -m sei.credenciais --cadastrar")
                 return 1
             del senha
             processos = escolher_processos(sei, controle, args.processo, args.reanalisar, config.TENTATIVAS_MAXIMAS)

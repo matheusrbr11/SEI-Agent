@@ -5,8 +5,8 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")  # o .env da pasta do projeto, de onde quer que o programa seja iniciado (Agendador de Tarefas)
 
 # Variáveis do .env que ainda têm o texto-modelo do .env.example ("<seu usuário do SEI>"): são ignoradas, como se
 # estivessem vazias. O main.py avisa quais são no log.
@@ -64,7 +64,7 @@ def _emails(texto: str) -> list[str]:
 SEI_USUARIO = _texto("SEI_USUARIO")
 SEI_ORGAO = _texto("SEI_ORGAO", "SEFAZ")
 SEI_UNIDADE = _texto("SEI_UNIDADE", "SUPCONFI")
-SEI_MODO = _escolha("SEI_MODO", "marcador", {"marcador", "novos"})
+SEI_MODO = _escolha("SEI_MODO", "novos", {"marcador", "novos"})
 SEI_MARCADOR = _texto("SEI_MARCADOR", "AGENTE - ANALISAR")
 LIMITE_TEXTO_DOCUMENTO = _numero("LIMITE_TEXTO_DOCUMENTO", 80, minimo=0, tipo=int)
 HEADLESS = _booleano("HEADLESS", False)
