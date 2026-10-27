@@ -241,6 +241,17 @@ def test_manifestacoes_anteriores():
     assert any("'resposta da SUPCONFI' não é tipo" in p for p in _problemas(manifestacoes="2 - Resposta - resposta da SUPCONFI - Devolução."))
 
 
+def test_manifestacoes_ausentes_viram_um_aviso_so():
+    entrada = _entrada()
+    nossas = entrada["pre_calculado"]["manifestacoes_nossas"]
+    entrada["pre_calculado"]["manifestacoes_nossas"] = nossas + [
+        {"ordem": 8, "nome": "Despacho A", "unidade": "SEFAZ/SUPCONFI"},
+        {"ordem": 9, "nome": "Despacho B", "unidade": "SEFAZ/SUPCONFI"},
+    ]
+    avisos = [p for p in validar_saida(_analise(entrada), entrada) if "Manifestações anteriores" in p]
+    assert avisos == ["AVISO: 2 manifestações nossas não aparecem em Manifestações anteriores (ordens 8, 9)"]
+
+
 def test_manifestacoes_anteriores_quando_nao_ha_nenhuma():
     entrada = _entrada()
     entrada["pre_calculado"]["manifestacoes_nossas"] = []

@@ -138,6 +138,9 @@ class _SEIFalso:
             documentos=[DocumentoSEI(nome="D", texto="À SUPCONFI", origem_texto="sei_html", unidade="SEFAZ/SUBTES")],
         )
 
+    def apagar_downloads(self, numero):
+        self.eventos.append(("downloads apagados", numero))
+
     def fechar(self):
         self.eventos.append("navegador fechado")
 
@@ -166,7 +169,7 @@ def test_main_entrega_fecha_o_navegador_e_so_depois_espera(tmp_path, monkeypatch
 
     assert main.main() == 0
     assert (tmp_path / "onedrive_entrada" / "ENTRADA_P1.json").is_file()
-    assert eventos == ["navegador fechado", ("espera", ["P1"], 1, 30 * 60)]
+    assert eventos == [("downloads apagados", "P1"), "navegador fechado", ("espera", ["P1"], 1, 30 * 60)]
 
 
 def test_main_com_sem_saida_nao_espera(tmp_path, monkeypatch):
@@ -174,3 +177,13 @@ def test_main_com_sem_saida_nao_espera(tmp_path, monkeypatch):
     _preparar_main(monkeypatch, tmp_path, [], sem_saida=True)
     monkeypatch.setattr(saidas, "aguardar_e_processar", _nao_deve_aguardar)
     assert main.main() == 0
+
+
+def test_main_liga_o_log_so_ao_executar(tmp_path, monkeypatch):
+    _configurar(monkeypatch, tmp_path)
+    _preparar_main(monkeypatch, tmp_path, [], sem_saida=True)
+    chamadas = []
+    monkeypatch.setattr(main, "_configurar_log", lambda: chamadas.append("log"))
+    assert chamadas == []  # importar o módulo não liga o log em arquivo
+    assert main.main() == 0
+    assert chamadas == ["log"]

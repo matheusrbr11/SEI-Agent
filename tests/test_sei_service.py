@@ -364,3 +364,33 @@ def test_planilha_entra_no_processo_sem_texto_e_sem_download(tmp_path, monkeypat
     assert (planilha.nome, planilha.texto, planilha.origem_texto, planilha.unidade) == ("Planilha", None, "arquivo", "SEFAZ/SUBTES")
     assert planilha.motivo_sem_texto == "planilha Excel não lida"
     assert doc.texto == "x" * 100
+
+
+def _servico_com_downloads(tmp_path):
+    servico = SEIService.__new__(SEIService)
+    servico.pasta_downloads = tmp_path / "downloads"
+    servico.pasta_downloads.mkdir()
+    return servico
+
+
+def test_apagar_downloads_remove_a_pasta_do_processo_e_so_ela(tmp_path):
+    servico = _servico_com_downloads(tmp_path)
+    for nome in ("SEI-1_2_3", "SEI-4_5_6"):
+        (servico.pasta_downloads / nome).mkdir()
+        (servico.pasta_downloads / nome / "Doc.pdf").write_bytes(b"%PDF-")
+    servico.apagar_downloads("SEI-1/2/3")
+    assert [p.name for p in servico.pasta_downloads.iterdir()] == ["SEI-4_5_6"]
+
+
+def test_apagar_downloads_sem_pasta_do_processo_nao_faz_nada(tmp_path):
+    servico = _servico_com_downloads(tmp_path)
+    servico.apagar_downloads("SEI-1/2/3")
+    assert servico.pasta_downloads.is_dir()
+
+
+@pytest.mark.parametrize("numero", ["..", ".", ""])
+def test_apagar_downloads_nunca_apaga_fora_da_pasta_de_downloads(tmp_path, numero):
+    servico = _servico_com_downloads(tmp_path)
+    (tmp_path / "importante.txt").write_text("x", encoding="utf-8")
+    servico.apagar_downloads(numero)
+    assert (tmp_path / "importante.txt").is_file() and servico.pasta_downloads.is_dir()
