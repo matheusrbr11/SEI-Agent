@@ -5,6 +5,8 @@ import argparse
 import getpass
 import logging
 import sys
+from datetime import datetime
+from pathlib import Path
 
 import config
 from jupiter import configurar_log
@@ -23,6 +25,15 @@ def _configurar_log() -> None:
         log.addHandler(logging.StreamHandler(sys.stdout))
 
 
+def _avisar_texto_modelo() -> None:
+    """Avisa quais variáveis do .env ainda têm o texto-modelo do .env.example (o agente as trata como não preenchidas)."""
+    if config.VARIAVEIS_COM_TEXTO_MODELO:
+        log.warning(
+            "Variáveis do .env ainda com o texto-modelo do .env.example (ignoradas): %s",
+            ", ".join(config.VARIAVEIS_COM_TEXTO_MODELO),
+        )
+
+
 def argumentos():
     parser = argparse.ArgumentParser(description="Coleta processos do SEI para o Power Automate.")
     parser.add_argument("--processo", help="Processo único para teste.")
@@ -31,7 +42,9 @@ def argumentos():
     return parser.parse_args()
 
 
-def escolher_processos(sei, controle, processo_unico=None, reanalisar=False):
+def escolher_processos(sei, controle, processo_unico=None, reanalisar=False, tentativas_maximas=None):
+    """Processos a exportar. `--processo` e `--reanalisar` ignoram o banco; sem eles, `tentativas_maximas` (se vier)
+    deixa de lado os que já falharam esse tanto de vezes seguidas."""
     todos = sei.listar_todos()  # também carrega metadados
     if processo_unico:
         return [processo_unico]
@@ -43,7 +56,30 @@ def escolher_processos(sei, controle, processo_unico=None, reanalisar=False):
             log.info("Primeira execução: %d processos registrados como base.", len(todos))
             return []
         candidatos = todos
-    return candidatos if reanalisar else [n for n in candidatos if not controle.conhecido(n)]
+    if reanalisar:
+        return candidatos
+    novos = [n for n in candidatos if not controle.conhecido(n)]
+    if tentativas_maximas is None:
+        return novos
+    escolhidos = []
+    for numero in novos:
+        if controle.desistiu(numero, tentativas_maximas):
+            log.warning(
+                "%s ignorado: falhou %d vezes seguidas. Use `--processo` para tentar de novo.", numero, tentativas_maximas
+            )
+            controle.registrar_evento(numero, "desistiu", "aviso", f"{tentativas_maximas} falhas seguidas")
+        else:
+            escolhidos.append(numero)
+    return escolhidos
+
+
+def json_para_reaproveitar(controle, numero) -> Path | None:
+    """O JSON de uma entrega que falhou (`erro_envio`), se o arquivo ainda existe: dispensa coletar o processo de novo."""
+    linha = controle.linha(numero)
+    if not linha or linha["status"] != "erro_envio" or not linha["arquivo_entrada"]:
+        return None
+    arquivo = Path(linha["arquivo_entrada"])
+    return arquivo if arquivo.is_file() else None
 
 
 def entregar(arquivo) -> bool:
@@ -55,7 +91,50 @@ def entregar(arquivo) -> bool:
     return False
 
 
-def _registrar(resultado):
+def _processar(numero, sei, controle, reaproveitar=None) -> tuple[bool, bool]:
+    """Coleta (ou reaproveita o JSON de uma entrega que falhou), exporta e entrega um processo.
+
+    Devolve (entregue, falhou): `entregue` é True se o JSON foi copiado para o SharePoint; `falhou`, se a coleta ou a
+    entrega deu erro. Cada passo vai para o historico do banco.
+    """
+    try:
+        if reaproveitar is not None:
+            arquivo = reaproveitar
+            gerado = datetime.fromtimestamp(arquivo.stat().st_mtime).strftime("%d/%m/%Y %H:%M")
+            log.info("JSON reaproveitado, sem coletar o processo de novo (gerado em %s): %s", gerado, arquivo)
+            controle.registrar_evento(numero, "json_reaproveitado", "ok", f"{arquivo.name}, gerado em {gerado}")
+        else:
+            processo = sei.coletar_processo(numero)
+            if processo is None:
+                controle.salvar(numero, "erro_coleta", erro="Falha na coleta")
+                controle.registrar_evento(numero, "coleta", "erro", "Falha na coleta")
+                return False, True
+            controle.registrar_evento(numero, "coleta", "ok", f"{len(processo.documentos)} documento(s)")
+            arquivo = exportar_para_automate(processo, config.PASTA_AUTOMATE_ENTRADA)
+            log.info("Entrada criada: %s", arquivo)
+            controle.registrar_evento(numero, "json_gerado", "ok", arquivo.name)
+            sei.apagar_downloads(numero)  # o JSON já tem o texto: nada mais precisa dos anexos em disco
+        try:
+            entregue = entregar(arquivo)
+        except Exception as erro:
+            log.error("Erro ao enviar %s: %s", numero, erro)
+            controle.salvar(numero, "erro_envio", arquivo_entrada=str(arquivo), erro=str(erro))
+            controle.registrar_evento(numero, "entrega", "erro", str(erro))
+            return False, True
+        if entregue:
+            controle.registrar_evento(numero, "entrega", "ok", "copiado para o SharePoint")
+        else:
+            controle.registrar_evento(numero, "entrega", "aviso", "SHAREPOINT_PASTA_ENTRADA vazia: JSON não copiado")
+        controle.salvar(numero, "exportado", arquivo_entrada=str(arquivo))
+        return entregue, False
+    except Exception as erro:
+        log.exception("Erro ao processar %s", numero)
+        controle.salvar(numero, "erro_coleta", erro=str(erro))
+        controle.registrar_evento(numero, "coleta", "erro", str(erro))
+        return False, True
+
+
+def _registrar(resultado, controle=None):
     mensagem = (
         "Análise %s (processo %s): %d correção(ões), %d erro(s), %d aviso(s). Relatório: %s.validacao.txt"
         % (resultado.arquivo, resultado.numero or "?", len(resultado.correcoes), len(resultado.erros),
@@ -64,17 +143,26 @@ def _registrar(resultado):
     (log.error if resultado.erros else log.warning if resultado.avisos else log.info)(mensagem)
     for problema in resultado.problemas:
         log.info("    %s", problema)
+    enviado = None  # None: o envio ao Teams nem foi tentado
     if teams.configurado():
-        if teams.enviar_resultado(resultado):
+        enviado = teams.enviar_resultado(resultado)
+        if enviado:
             log.info("Análise %s enviada pelo Teams para %s.", resultado.arquivo, ", ".join(config.TEAMS_DESTINATARIOS))
         else:
             log.warning("Análise %s NÃO foi enviada pelo Teams (veja o log de erros).", resultado.arquivo)
+    if controle is not None:
+        try:
+            if not saidas.registrar_no_banco(controle, resultado, enviado):
+                log.warning("Processo %s não está no banco; o status dele não foi atualizado.", resultado.numero or "?")
+        except Exception:
+            log.exception("Não foi possível atualizar o banco com a análise %s.", resultado.arquivo)
 
 
-def processar_saidas(entregues, antes):
+def processar_saidas(entregues, antes, controle=None):
     """Espera as análises NOVAS dos processos `entregues` na pasta de saída e corrige/valida as que chegarem.
 
-    O que já estava na pasta (`antes`) e as análises de outros processos são ignorados.
+    O que já estava na pasta (`antes`) e as análises de outros processos são ignorados. Se `controle` vier, cada
+    análise que chega marca o processo como `analisado` no banco.
     Nunca derruba a execução: erros e Ctrl+C só encerram a espera.
     """
     pasta = config.SHAREPOINT_PASTA_SAIDA
@@ -87,7 +175,8 @@ def processar_saidas(entregues, antes):
     try:
         resultados, faltando = saidas.aguardar_e_processar(
             pasta, [config.PASTA_AUTOMATE_ENTRADA, config.SHAREPOINT_PASTA_ENTRADA], config.PASTA_AUTOMATE_SAIDA,
-            entregues, antes, config.SAIDA_ESPERA_MINUTOS * 60, config.SAIDA_INTERVALO_SEGUNDOS, ao_processar=_registrar,
+            entregues, antes, config.SAIDA_ESPERA_MINUTOS * 60, config.SAIDA_INTERVALO_SEGUNDOS,
+            ao_processar=lambda resultado: _registrar(resultado, controle),
         )
     except KeyboardInterrupt:
         log.warning("Espera pelas análises interrompida.")
@@ -103,6 +192,7 @@ def processar_saidas(entregues, antes):
 
 def main():
     _configurar_log()
+    _avisar_texto_modelo()
     args = argumentos()
     usuario = config.SEI_USUARIO or input("Usuário SEI: ").strip()
     senha = getpass.getpass("Senha SEI: ")
@@ -110,39 +200,38 @@ def main():
     entregues = []  # processos cujo JSON foi copiado para o SharePoint: as análises deles virão da pasta de saída
     sei = SEIService(config.PASTA_DOWNLOADS, config.LIMITE_TEXTO_DOCUMENTO, config.HEADLESS)
     controle = ControleProcessos(config.CAMINHO_BANCO)
-    try:
-        if not sei.autenticar(usuario, senha, config.SEI_ORGAO, config.SEI_UNIDADE):
-            log.error("Não foi possível autenticar no SEI.")
-            return 1
-        del senha
-        processos = escolher_processos(sei, controle, args.processo, args.reanalisar)
-        log.info("%d processo(s) para exportar.", len(processos))
-        for numero in processos:
-            try:
-                processo = sei.coletar_processo(numero)
-                if processo is None:
-                    controle.salvar(numero, "erro_coleta", erro="Falha na coleta")
-                    continue
-                arquivo = exportar_para_automate(processo, config.PASTA_AUTOMATE_ENTRADA)
-                log.info("Entrada criada: %s", arquivo)
-                sei.apagar_downloads(numero)  # o JSON já tem o texto: nada mais precisa dos anexos em disco
-                try:
-                    if entregar(arquivo):
-                        entregues.append(numero)
-                except Exception as erro:
-                    log.error("Erro ao enviar %s: %s", numero, erro)
-                    controle.salvar(numero, "erro_envio", arquivo_entrada=str(arquivo), erro=str(erro))
-                    continue
-                controle.salvar(numero, "exportado", arquivo_entrada=str(arquivo))
-            except Exception as erro:
-                log.exception("Erro ao processar %s", numero)
-                controle.salvar(numero, "erro_coleta", erro=str(erro))
+    modo = "processo" if args.processo else config.SEI_MODO
+    controle.iniciar_execucao(modo, f"processo={args.processo or '-'} reanalisar={args.reanalisar} sem_saida={args.sem_saida}")
+    codigo = 1  # só passa a 0 se a execução chegar ao fim sem nenhum processo com falha
+    falhas = []  # processos cuja coleta ou entrega deu erro nesta execução
+    try:  # o banco fica aberto até o fim da espera: cada análise que chega atualiza a linha do processo
+        try:
+            if not sei.autenticar(usuario, senha, config.SEI_ORGAO, config.SEI_UNIDADE):
+                log.error("Não foi possível autenticar no SEI.")
+                return 1
+            del senha
+            processos = escolher_processos(sei, controle, args.processo, args.reanalisar, config.TENTATIVAS_MAXIMAS)
+            log.info("%d processo(s) para exportar.", len(processos))
+            for numero in processos:
+                controle.registrar_evento(numero, "selecionado", "ok", modo)
+                # --processo e --reanalisar pedem uma coleta nova; sem eles, o JSON de uma entrega que falhou serve
+                reaproveitar = None if (args.processo or args.reanalisar) else json_para_reaproveitar(controle, numero)
+                entregue, falhou = _processar(numero, sei, controle, reaproveitar)
+                if entregue:
+                    entregues.append(numero)
+                if falhou:
+                    falhas.append(numero)
+        finally:
+            sei.fechar()  # o navegador não precisa ficar aberto durante a espera pelas análises
+        if not args.sem_saida:
+            processar_saidas(entregues, antes, controle)
+        if falhas:
+            log.error("%d processo(s) com falha nesta execução: %s", len(falhas), ", ".join(falhas))
+        codigo = 1 if falhas else 0
+        return codigo
     finally:
+        controle.finalizar_execucao(codigo)
         controle.fechar()
-        sei.fechar()  # o navegador não precisa ficar aberto durante a espera pelas análises
-    if not args.sem_saida:
-        processar_saidas(entregues, antes)
-    return 0
 
 
 if __name__ == "__main__":
