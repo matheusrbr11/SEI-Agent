@@ -40,8 +40,10 @@ TEAMS_DESTINATARIOS = _emails(os.getenv("TEAMS_DESTINATARIOS", ""))
 TEAMS_LIMITE_CARACTERES = int(os.getenv("TEAMS_LIMITE_CARACTERES", "25000"))  # o Teams recusa mensagens muito grandes
 
 PASTA_DOWNLOADS = BASE_DIR / "downloads"
-PASTA_LOGS = BASE_DIR / "logs"
+PASTA_LOGS = BASE_DIR / "logs" / "execução"  # só as execuções reais do agente
 PASTA_LOGS_ERROS = PASTA_LOGS / "erros"
+PASTA_LOGS_TESTES = BASE_DIR / "logs" / "tests"  # os testes gravam aqui, separados dos logs reais
+PASTA_LOGS_TESTES_ERROS = PASTA_LOGS_TESTES / "erros"
 PASTA_AUTOMATE = BASE_DIR / "automate"
 PASTA_AUTOMATE_ENTRADA = PASTA_AUTOMATE / "entrada"
 PASTA_AUTOMATE_SAIDA = PASTA_AUTOMATE / "saida"

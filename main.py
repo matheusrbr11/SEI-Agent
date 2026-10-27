@@ -13,10 +13,14 @@ from automate.exportador import copiar_para_sharepoint, exportar_para_automate
 from banco.controle import ControleProcessos
 from sei.sei_service import SEIService
 
-configurar_log("Agente SEI", str(config.PASTA_LOGS), str(config.PASTA_LOGS_ERROS))
 log = logging.getLogger("jupiter.agente.main")
-if not any(isinstance(h, logging.StreamHandler) for h in log.handlers):
-    log.addHandler(logging.StreamHandler(sys.stdout))
+
+
+def _configurar_log() -> None:
+    """Liga o log em arquivo e na tela. Só roda na execução do agente, e não ao importar o módulo (os testes importam)."""
+    configurar_log("Agente SEI", str(config.PASTA_LOGS), str(config.PASTA_LOGS_ERROS))
+    if not any(isinstance(h, logging.StreamHandler) for h in log.handlers):
+        log.addHandler(logging.StreamHandler(sys.stdout))
 
 
 def argumentos():
@@ -98,6 +102,7 @@ def processar_saidas(entregues, antes):
 
 
 def main():
+    _configurar_log()
     args = argumentos()
     usuario = config.SEI_USUARIO or input("Usuário SEI: ").strip()
     senha = getpass.getpass("Senha SEI: ")
@@ -120,6 +125,7 @@ def main():
                     continue
                 arquivo = exportar_para_automate(processo, config.PASTA_AUTOMATE_ENTRADA)
                 log.info("Entrada criada: %s", arquivo)
+                sei.apagar_downloads(numero)  # o JSON já tem o texto: nada mais precisa dos anexos em disco
                 try:
                     if entregar(arquivo):
                         entregues.append(numero)
