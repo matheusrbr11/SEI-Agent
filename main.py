@@ -90,7 +90,6 @@ def escolher_processos(sei, controle, processo_unico=None, reanalisar=False, ten
             log.warning(
                 "%s ignorado: falhou %d vezes seguidas. Use `--processo` para tentar de novo.", numero, tentativas_maximas
             )
-            controle.registrar_evento(numero, "desistiu", "aviso", f"{tentativas_maximas} falhas seguidas")
         else:
             escolhidos.append(numero)
     return escolhidos
@@ -118,42 +117,36 @@ def _processar(numero, sei, controle, reaproveitar=None) -> tuple[bool, bool]:
     """Coleta (ou reaproveita o JSON de uma entrega que falhou), exporta e entrega um processo.
 
     Devolve (entregue, falhou): `entregue` é True se o JSON foi copiado para o SharePoint; `falhou`, se a coleta ou a
-    entrega deu erro. Cada passo vai para o historico do banco.
+    entrega deu erro. O estado vai para a linha do processo e os totais, para a execução em curso.
     """
     try:
         if reaproveitar is not None:
             arquivo = reaproveitar
             gerado = datetime.fromtimestamp(arquivo.stat().st_mtime).strftime("%d/%m/%Y %H:%M")
             log.info("JSON reaproveitado, sem coletar o processo de novo (gerado em %s): %s", gerado, arquivo)
-            controle.registrar_evento(numero, "json_reaproveitado", "ok", f"{arquivo.name}, gerado em {gerado}")
         else:
             processo = sei.coletar_processo(numero)
             if processo is None:
                 controle.salvar(numero, "erro_coleta", erro="Falha na coleta")
-                controle.registrar_evento(numero, "coleta", "erro", "Falha na coleta")
+                controle.contar(numero, "falhas")
                 return False, True
-            controle.registrar_evento(numero, "coleta", "ok", f"{len(processo.documentos)} documento(s)")
             arquivo = exportar_para_automate(processo, config.PASTA_AUTOMATE_ENTRADA)
             log.info("Entrada criada: %s", arquivo)
-            controle.registrar_evento(numero, "json_gerado", "ok", arquivo.name)
             sei.apagar_downloads(numero)  # o JSON já tem o texto: nada mais precisa dos anexos em disco
         try:
             entregue = entregar(arquivo)
         except Exception as erro:
             log.error("Erro ao enviar %s: %s", numero, erro)
             controle.salvar(numero, "erro_envio", arquivo_entrada=str(arquivo), erro=str(erro))
-            controle.registrar_evento(numero, "entrega", "erro", str(erro))
+            controle.contar(numero, "falhas")
             return False, True
-        if entregue:
-            controle.registrar_evento(numero, "entrega", "ok", "copiado para o SharePoint")
-        else:
-            controle.registrar_evento(numero, "entrega", "aviso", "SHAREPOINT_PASTA_ENTRADA vazia: JSON não copiado")
         controle.salvar(numero, "exportado", arquivo_entrada=str(arquivo))
+        controle.contar(numero, "exportados")
         return entregue, False
     except Exception as erro:
         log.exception("Erro ao processar %s", numero)
         controle.salvar(numero, "erro_coleta", erro=str(erro))
-        controle.registrar_evento(numero, "coleta", "erro", str(erro))
+        controle.contar(numero, "falhas")
         return False, True
 
 
@@ -238,7 +231,7 @@ def main():
             processos = escolher_processos(sei, controle, args.processo, args.reanalisar, config.TENTATIVAS_MAXIMAS)
             log.info("%d processo(s) para exportar.", len(processos))
             for numero in processos:
-                controle.registrar_evento(numero, "selecionado", "ok", modo)
+                controle.contar(numero, "selecionados")
                 # --processo e --reanalisar pedem uma coleta nova; sem eles, o JSON de uma entrega que falhou serve
                 reaproveitar = None if (args.processo or args.reanalisar) else json_para_reaproveitar(controle, numero)
                 entregue, falhou = _processar(numero, sei, controle, reaproveitar)
