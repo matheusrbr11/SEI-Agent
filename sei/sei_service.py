@@ -4,6 +4,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -13,7 +14,7 @@ from selenium.common.exceptions import ElementClickInterceptedException, Timeout
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from extratores.extrator import extrair_conteudo
-from sei.modelos import MOTIVO_PLANILHA, DocumentoSEI, ProcessoSEI
+from sei.modelos import MOTIVO_PLANILHA, DocumentoSEI, ProcessoSEI, nome_seguro
 
 logger = logging.getLogger("jupiter.agente.sei")
 
@@ -70,10 +71,6 @@ _XPATH_DOCUMENTOS = "//div[@id = 'divArvore']//div//a[@class = 'infraArvoreNo']"
 _XPATH_LINKS_DOCUMENTOS = "//div[@id = 'divArvore']//a[@class = 'infraArvoreNo' and not(starts-with(@id, 'anchorPASTA'))]"
 
 
-def _nome_seguro(numero: str) -> str:
-    return numero.replace("/", "_").replace(" ", "_")
-
-
 class SEIService:
     def __init__(self, pasta_downloads: Path, limite_texto: int = 80, headless: bool = False):
         self.sei = SEI()
@@ -88,6 +85,20 @@ class SEIService:
         if unidade:
             self.sei.trocar_unidade(unidade)
         return True
+
+    def apagar_downloads(self, numero: str) -> None:
+        """Apaga a pasta de downloads do processo; nunca levanta erro.
+
+        Só apaga uma pasta que esteja diretamente dentro da pasta de downloads.
+        """
+        base = self.pasta_downloads.resolve()
+        pasta = (base / nome_seguro(numero)).resolve()
+        if pasta.parent != base or not pasta.is_dir():
+            return
+        try:
+            shutil.rmtree(pasta)
+        except OSError:
+            logger.warning("Não foi possível apagar a pasta de downloads de %s: %s", numero, pasta, exc_info=True)
 
     def fechar(self) -> None:
         try:
@@ -270,7 +281,7 @@ class SEIService:
 
     def _salvar_diagnostico(self, numero: str) -> None:
         """Guarda a árvore e um print da tela na pasta do processo; nunca levanta erro."""
-        pasta = self.pasta_downloads / _nome_seguro(numero)
+        pasta = self.pasta_downloads / nome_seguro(numero)
         try:
             pasta.mkdir(parents=True, exist_ok=True)
             driver = self.sei.driver
@@ -294,7 +305,7 @@ class SEIService:
             self._salvar_diagnostico(numero)
             raise
         unidades = self._unidades_geradoras()
-        pasta = self.pasta_downloads / _nome_seguro(numero)
+        pasta = self.pasta_downloads / nome_seguro(numero)
         documentos: list[DocumentoSEI] = []
         for nome, texto_original in textos.items():
             if texto_original is None:  # planilha Excel: mantém a posição na linha do tempo, sem ler nem baixar

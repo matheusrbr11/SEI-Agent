@@ -8,6 +8,11 @@ from typing import Optional
 MOTIVO_PLANILHA = "planilha Excel não lida"
 
 
+def nome_seguro(numero: str) -> str:
+    """Número do processo em forma própria para nome de arquivo ou de pasta ("SEI-1/2/3" vira "SEI-1_2_3")."""
+    return numero.replace("/", "_").replace(" ", "_")
+
+
 @dataclass
 class DocumentoSEI:
     nome: str
