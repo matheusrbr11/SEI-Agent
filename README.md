@@ -41,7 +41,28 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Edite `.env` e confirme `SEI_ORGAO`, `SEI_UNIDADE`, marcador e usuário.
+Para desenvolver e rodar os testes, instale `requirements-dev.txt` no lugar (ele inclui o `requirements.txt` e acrescenta o `pytest`). As versões do `requirements.txt` estão fixadas; só a `jupiter-subtes` fica com `>=`, porque é uma biblioteca interna, atualizada à parte (`pip install --upgrade jupiter-subtes`).
+
+## Configuração (`.env`)
+
+Edite o `.env` (copiado de `.env.example`; ele está no `.gitignore`, não o versione nem o compartilhe). A senha do SEI não fica nele: o agente a pergunta a cada execução. Variável ausente = valor padrão.
+
+| Variável | Padrão | Para que serve |
+|---|---|---|
+| `SEI_USUARIO` | (pergunta ao executar) | Usuário do SEI |
+| `SEI_ORGAO` | `SEFAZ` | Órgão no login |
+| `SEI_UNIDADE` | `SUPCONFI` | Unidade em que o agente trabalha |
+| `SEI_MODO` | `marcador` | `marcador` (processos com o marcador abaixo) ou `novos` (processos que surgirem depois da primeira execução) |
+| `SEI_MARCADOR` | `AGENTE - ANALISAR` | Marcador dos processos a analisar, no modo `marcador` |
+| `LIMITE_TEXTO_DOCUMENTO` | `80` | Documento do SEI com menos caracteres que isso é baixado e lido pelo anexo |
+| `HEADLESS` | `False` | `True` roda o navegador sem janela |
+| `SHAREPOINT_PASTA_ENTRADA` | (vazio = não copia) | Pasta `entrada` sincronizada pelo OneDrive |
+| `SHAREPOINT_PASTA_SAIDA` | (vazio = não lê) | Pasta `saida` sincronizada pelo OneDrive |
+| `SAIDA_ESPERA_MINUTOS` | `5` | Quanto esperar, no total, pelas análises do Power Automate |
+| `SAIDA_INTERVALO_SEGUNDOS` | `20` | De quanto em quanto tempo olhar a pasta de saída |
+| `TEAMS_WEBHOOK_URL` | (vazio = não envia) | Webhook do Teams |
+| `TEAMS_DESTINATARIOS` | (vazio = não envia) | E-mails de quem recebe a análise, separados por vírgula |
+| `TEAMS_LIMITE_CARACTERES` | `25000` | O Teams recusa mensagens maiores; o texto é cortado |
 
 ## Execução
 
@@ -100,17 +121,20 @@ No `main.py`, só vai ao Teams a análise **nova** dos processos daquela execuç
 
 - `automate/entrada`: arquivos JSON que disparam o fluxo.
 - `automate/saida`: análises já corrigidas e conferidas pelo agente (veja "Leitura da saída" abaixo), cada uma com seu `.validacao.txt`.
-- `automate/erros`: registros criados pelo ramo de falha do fluxo.
-- `downloads`: anexos baixados temporariamente.
-- `banco/agente.db`: checkpoint local.
-- `logs`: logs de execução.
+- `automate/erros`: reservada para registros de falha do fluxo; o agente só cria a pasta e não grava nada nela.
+- `downloads`: anexos baixados durante a coleta. A pasta de cada processo é apagada assim que o JSON de entrada é gerado. Só sobra ali o que pertence a processos cuja coleta falhou (anexos e o diagnóstico da árvore, com HTML e print de tela), para investigação; apague-o depois.
+- `banco/agente.db`: checkpoint local (SQLite) com o status de cada processo (`exportado`, `erro_coleta`, `erro_envio`...). É ele que impede o agente de exportar de novo um processo já exportado; use `--reanalisar` para ignorá-lo.
+- `logs/execução`: logs das execuções do agente (e, em `erros`, só os de nível ERROR). `logs/tests`: logs das rodadas de `pytest` (um arquivo por rodada, e em `erros` o de nível ERROR); os testes nunca gravam em `logs/execução`.
 
 ## Configuração do Power Automate
 
-Veja `GUIA_POWER_AUTOMATE.md`. O prompt pronto está em `PROMPT_POWER_AUTOMATE.txt`.
+O fluxo em si é configurado no Power Automate, fora deste projeto. Os prompts estão na raiz: `prompt.md` (a análise do processo) e `prompt_revisor.md` (a revisão de uma análise contra um checklist).
 
 ## Testes locais
 
 ```powershell
+pip install -r requirements-dev.txt
 pytest -q
 ```
+
+Os testes não usam o SEI, o Teams nem o OneDrive de verdade. O log de cada rodada vai para `logs/tests`.
