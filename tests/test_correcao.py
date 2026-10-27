@@ -98,3 +98,20 @@ def test_linhas_em_branco_repetidas_e_espacos_no_fim():
 def test_quebras_de_linha_do_windows():
     corrigido, _ = corrigir_formato(_analise().replace("\n", "\r\n"))
     assert "\r" not in corrigido
+
+
+def test_marcacao_documents_do_comeco_e_do_fim_e_removida():
+    texto = _analise()
+    corrigido, correcoes = corrigir_formato("<documents>\n" + texto.rstrip("\n") + " </documents>\n")
+    assert corrigido == texto
+    assert correcoes == ["Marcação <documents> do começo/fim da análise removida"]
+
+
+def test_marcacao_documents_em_linha_propria_tambem_e_removida():
+    texto = _analise()
+    assert corrigir_formato("<documents>\n" + texto + "</documents>\n") == (texto, ["Marcação <documents> do começo/fim da análise removida"])
+
+
+def test_documents_no_meio_do_texto_nao_e_mexido():
+    texto = _analise(contexto="O parecer cita a tag <documents> do sistema.")
+    assert corrigir_formato(texto) == (texto, [])

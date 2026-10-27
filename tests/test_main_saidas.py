@@ -5,6 +5,7 @@ import os
 import config
 import main
 from automate import saidas
+from banco.controle import ControleProcessos
 from sei.modelos import DocumentoSEI, ProcessoSEI
 from test_validador import _analise, _entrada
 
@@ -187,3 +188,115 @@ def test_main_liga_o_log_so_ao_executar(tmp_path, monkeypatch):
     assert chamadas == []  # importar o módulo não liga o log em arquivo
     assert main.main() == 0
     assert chamadas == ["log"]
+
+
+# --- o banco acompanha a análise
+
+def _banco_com(tmp_path, numero="SEI-040005/000729/2026"):
+    controle = ControleProcessos(tmp_path / "banco.db")
+    controle.salvar(numero, "exportado", arquivo_entrada="entrada.json")
+    return controle
+
+
+def _linha(controle, numero="SEI-040005/000729/2026"):
+    return controle.conexao.execute(
+        "SELECT status, arquivo_entrada, arquivo_saida, erro FROM processos WHERE numero=?", (numero,)
+    ).fetchone()
+
+
+def _analise_na_saida(tmp_path, pasta_saida, **trocas):
+    entrada = _entrada()
+    (tmp_path / "entrada").mkdir(exist_ok=True)
+    (tmp_path / "entrada" / "ENTRADA_SEI-040005_000729_2026.json").write_text(json.dumps(entrada), encoding="utf-8")
+    (pasta_saida / "ANALISE_X.md").write_text(_analise(entrada, **trocas), encoding="utf-8")
+    os.utime(pasta_saida / "ANALISE_X.md", (1_000_000_000, 1_000_000_000))
+
+
+def test_analise_que_chega_marca_o_processo_como_analisado(tmp_path, monkeypatch):
+    pasta_saida, log = _configurar(monkeypatch, tmp_path)
+    _analise_na_saida(tmp_path, pasta_saida)
+    controle = _banco_com(tmp_path)
+    main.processar_saidas(["SEI-040005/000729/2026"], set(), controle)
+    status, entrada, saida, erro = _linha(controle)
+    assert status == "analisado" and entrada == "entrada.json" and erro is None
+    assert saida == str(tmp_path / "validadas" / "ANALISE_X.md")
+    assert log.mensagens("warning") == []
+    controle.fechar()
+
+
+def test_analise_com_erro_de_validacao_fica_analisada_com_o_resumo(tmp_path, monkeypatch):
+    pasta_saida, _ = _configurar(monkeypatch, tmp_path)
+    _analise_na_saida(tmp_path, pasta_saida, competencia="COMPETÊNCIA PARCIAL. Talvez.")
+    controle = _banco_com(tmp_path)
+    main.processar_saidas(["SEI-040005/000729/2026"], set(), controle)
+    status, _, _, erro = _linha(controle)
+    assert status == "analisado" and controle.conhecido("SEI-040005/000729/2026")  # não será coletado de novo
+    assert erro == "Validação: 1 ERRO(s)"
+    controle.fechar()
+
+
+def test_analise_de_processo_fora_do_banco_gera_aviso_e_nao_cria_linha(tmp_path, monkeypatch):
+    pasta_saida, log = _configurar(monkeypatch, tmp_path)
+    _analise_na_saida(tmp_path, pasta_saida)
+    controle = _banco_com(tmp_path, numero="SEI-outro")
+    main.processar_saidas(["SEI-040005/000729/2026"], set(), controle)
+    assert any("SEI-040005/000729/2026 não está no banco" in m for m in log.mensagens("warning"))
+    assert controle.conexao.execute("SELECT COUNT(*) FROM processos").fetchone()[0] == 1
+    controle.fechar()
+
+
+def test_falha_do_banco_nao_derruba_o_processamento_da_analise(tmp_path, monkeypatch):
+    pasta_saida, log = _configurar(monkeypatch, tmp_path)
+    _analise_na_saida(tmp_path, pasta_saida)
+
+    class _BancoQuebrado:
+        def registrar_analise(self, *args):
+            raise RuntimeError("banco travado")
+
+    main.processar_saidas(["SEI-040005/000729/2026"], set(), _BancoQuebrado())
+    assert log.mensagens("exception") == ["Não foi possível atualizar o banco com a análise ANALISE_X.md."]
+    assert (tmp_path / "validadas" / "ANALISE_X.validacao.txt").is_file()  # a análise foi corrigida e validada
+
+
+def test_main_mantem_o_banco_aberto_ate_depois_da_espera(tmp_path, monkeypatch):
+    _configurar(monkeypatch, tmp_path)
+    _preparar_main(monkeypatch, tmp_path, [], sem_saida=False)
+    estado = {}
+
+    def espera(entregues, antes, controle=None):
+        controle.conexao.execute("SELECT 1")  # levanta ProgrammingError se já estiver fechado
+        estado["controle"] = controle
+
+    monkeypatch.setattr(main, "processar_saidas", espera)
+    assert main.main() == 0
+    assert "controle" in estado
+    try:
+        estado["controle"].conexao.execute("SELECT 1")
+        fechado = False
+    except Exception:
+        fechado = True
+    assert fechado  # e só é fechado no fim da execução
+
+
+def test_resultado_do_teams_e_os_eventos_da_analise_vao_para_o_banco(tmp_path, monkeypatch):
+    pasta_saida, _ = _configurar(monkeypatch, tmp_path)
+    _analise_na_saida(tmp_path, pasta_saida)
+    monkeypatch.setattr(main.teams, "configurado", lambda: True)
+    monkeypatch.setattr(main.teams, "enviar_resultado", lambda resultado: False)  # o Teams recusou
+    controle = _banco_com(tmp_path)
+    controle.iniciar_execucao("marcador")
+    main.processar_saidas(["SEI-040005/000729/2026"], set(), controle)
+    assert controle.linha("SEI-040005/000729/2026")["teams_enviado"] == 0
+    eventos = [(etapa, resultado) for _, _, etapa, resultado, _ in controle.historico_do_processo("SEI-040005/000729/2026")]
+    assert eventos == [("analise", "ok"), ("teams", "erro")]
+    controle.fechar()
+
+
+def test_teams_desligado_deixa_teams_enviado_vazio(tmp_path, monkeypatch):
+    pasta_saida, _ = _configurar(monkeypatch, tmp_path)
+    _analise_na_saida(tmp_path, pasta_saida)
+    controle = _banco_com(tmp_path)
+    main.processar_saidas(["SEI-040005/000729/2026"], set(), controle)
+    assert controle.linha("SEI-040005/000729/2026")["teams_enviado"] is None
+    assert [e[2] for e in controle.historico_do_processo("SEI-040005/000729/2026")] == ["analise"]
+    controle.fechar()

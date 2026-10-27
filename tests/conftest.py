@@ -15,6 +15,12 @@ def teams_desligado(monkeypatch):
     monkeypatch.setattr(config, "TEAMS_DESTINATARIOS", [])
 
 
+@pytest.fixture(autouse=True)
+def banco_so_de_teste(monkeypatch, tmp_path):
+    """Nenhum teste lê nem grava o banco real (banco/agente.db), mesmo sem configurar um próprio."""
+    monkeypatch.setattr(config, "CAMINHO_BANCO", tmp_path / "banco_de_teste.db")
+
+
 @pytest.fixture(autouse=True, scope="session")
 def log_dos_testes():
     """Um arquivo de log por rodada de testes, em logs/tests. A pasta logs/execução fica só com as execuções reais.

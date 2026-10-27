@@ -25,6 +25,14 @@ class _RespostaFalsa:
             raise requests.exceptions.HTTPError(f"{self.status_code}")
 
 
+@pytest.fixture(autouse=True)
+def pausas(monkeypatch):
+    """Sem esperar de verdade entre as tentativas; devolve as pausas pedidas."""
+    pedidas = []
+    monkeypatch.setattr(teams.time, "sleep", pedidas.append)
+    return pedidas
+
+
 @pytest.fixture
 def envios(monkeypatch):
     """Registra os POSTs em vez de enviar de verdade."""
@@ -91,6 +99,64 @@ def test_falha_no_envio_vira_false_sem_levantar_excecao(monkeypatch, falha):
 
     monkeypatch.setattr(teams.requests, "post", post)
     assert teams.enviar("olá", WEBHOOK, [PESSOA]) is False
+
+
+def _post_que_falha_ate(tentativa_que_funciona, erro):
+    chamadas = []
+
+    def post(*args, **kwargs):
+        chamadas.append(1)
+        if len(chamadas) < tentativa_que_funciona:
+            raise erro
+        return _RespostaFalsa()
+
+    return post, chamadas
+
+
+def test_falha_passageira_e_tentada_de_novo_e_conta_como_enviada(monkeypatch, pausas):
+    post, chamadas = _post_que_falha_ate(3, requests.exceptions.SSLError("certificate verify failed"))
+    monkeypatch.setattr(teams.requests, "post", post)
+    assert teams.enviar("olá", WEBHOOK, [PESSOA]) is True
+    assert len(chamadas) == 3 and pausas == [5, 15]
+
+
+def test_desiste_depois_de_tres_tentativas(monkeypatch, pausas):
+    post, chamadas = _post_que_falha_ate(99, requests.exceptions.ConnectionError("sem rede"))
+    monkeypatch.setattr(teams.requests, "post", post)
+    assert teams.enviar("olá", WEBHOOK, [PESSOA]) is False
+    assert len(chamadas) == 3 and pausas == [5, 15]
+
+
+@pytest.mark.parametrize("status,tentativas", [(500, 3), (503, 3), (429, 3), (400, 1), (401, 1), (404, 1)])
+def test_so_repete_erro_http_do_servidor_ou_limite_de_uso(monkeypatch, status, tentativas):
+    chamadas = []
+
+    class Resposta(_RespostaFalsa):
+        def raise_for_status(self):
+            erro = requests.exceptions.HTTPError(f"{status}")
+            erro.response = self
+            raise erro
+
+    def post(*args, **kwargs):
+        chamadas.append(1)
+        return Resposta(status)
+
+    monkeypatch.setattr(teams.requests, "post", post)
+    assert teams.enviar("olá", WEBHOOK, [PESSOA]) is False
+    assert len(chamadas) == tentativas
+
+
+def test_log_nao_mostra_a_chave_do_webhook(monkeypatch, caplog):
+    monkeypatch.setattr(teams.logger, "propagate", True)  # o logger da jupiter não propaga; aqui interessa só o texto
+    url = "https://exemplo.invalid/invoke?api-version=1&sp=%2Ftriggers&sig=SEGREDO123abc_-"
+    erro = requests.exceptions.SSLError(f"HTTPSConnectionPool: Max retries exceeded with url: {url} (Caused by SSLError)")
+    post, _ = _post_que_falha_ate(99, erro)
+    monkeypatch.setattr(teams.requests, "post", post)
+    with caplog.at_level("DEBUG", logger="jupiter.agente.teams"):
+        assert teams.enviar("olá", url, [PESSOA]) is False
+    texto = caplog.text + "".join(str(r.exc_info) for r in caplog.records)
+    assert "SEGREDO123abc" not in texto and "sig=***" in texto
+    assert all(r.exc_info is None for r in caplog.records)
 
 
 def test_nao_envia_sem_webhook_ou_sem_destinatario(tmp_path, envios, monkeypatch):

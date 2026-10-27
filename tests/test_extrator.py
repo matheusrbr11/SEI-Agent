@@ -1,3 +1,5 @@
+import pytest
+
 from extratores.extrator import _eh_pdf, extrair_conteudo
 
 
@@ -41,11 +43,8 @@ def test_docx(tmp_path):
     assert extrair_conteudo(arq) == "Primeiro parágrafo\nSegundo parágrafo"
 
 
-def test_excel_limita_linhas(tmp_path):
-    import pandas as pd
-    from extratores.extrator import extrair_excel
-    arq = tmp_path / "p.xlsx"
-    pd.DataFrame({"a": range(150)}).to_excel(arq, index=False, sheet_name="Dados")
-    texto = extrair_excel(arq, max_linhas=10)
-    assert "### Aba: Dados (150 linhas)" in texto
-    assert "9" in texto and "149" not in texto
+@pytest.mark.parametrize("nome", ["p.xlsx", "p.xls"])
+def test_planilhas_nao_sao_lidas(tmp_path, nome):
+    arq = tmp_path / nome
+    arq.write_bytes(b"PK\x03\x04conteudo")
+    assert extrair_conteudo(arq) == ""

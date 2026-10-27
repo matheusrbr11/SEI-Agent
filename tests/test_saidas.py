@@ -190,3 +190,59 @@ def test_linha_de_comando_sem_pasta_configurada_ou_inexistente(tmp_path, monkeyp
     _configurar(monkeypatch, tmp_path, tmp_path / "nao_existe", pasta_entrada)
     assert saidas.main([]) == 2
     assert "Pasta de saída não encontrada" in capsys.readouterr().out
+
+
+def test_linha_de_comando_marca_o_processo_como_analisado_no_banco(tmp_path, monkeypatch, capsys):
+    from banco.controle import ControleProcessos
+
+    entrada = _entrada()
+    pasta_entrada, saida, _ = _pastas(tmp_path, entrada)
+    _configurar(monkeypatch, tmp_path, saida, pasta_entrada)
+    numero = entrada["processo"]["numero"]
+    banco = ControleProcessos(config.CAMINHO_BANCO)
+    banco.salvar(numero, "exportado", arquivo_entrada="entrada.json")
+    banco.fechar()
+
+    (saida / "OK.md").write_text(_analise(entrada), encoding="utf-8")
+    assert saidas.main([]) == 0
+    assert "não está no banco" not in capsys.readouterr().out
+
+    banco = ControleProcessos(config.CAMINHO_BANCO)
+    linha = banco.conexao.execute("SELECT status, arquivo_entrada, arquivo_saida FROM processos").fetchone()
+    banco.fechar()
+    assert linha == ("analisado", "entrada.json", str(tmp_path / "validadas" / "OK.md"))
+
+
+def test_linha_de_comando_avisa_quando_o_processo_nao_esta_no_banco(tmp_path, monkeypatch, capsys):
+    entrada = _entrada()
+    pasta_entrada, saida, _ = _pastas(tmp_path, entrada)
+    _configurar(monkeypatch, tmp_path, saida, pasta_entrada)
+    (saida / "OK.md").write_text(_analise(entrada), encoding="utf-8")
+    assert saidas.main([]) == 0
+    assert "Banco: o processo" in capsys.readouterr().out
+
+
+def test_linha_de_comando_registra_a_execucao_e_o_historico(tmp_path, monkeypatch, capsys):
+    from banco.controle import ControleProcessos
+
+    entrada = _entrada()
+    pasta_entrada, saida, _ = _pastas(tmp_path, entrada)
+    _configurar(monkeypatch, tmp_path, saida, pasta_entrada)
+    numero = entrada["processo"]["numero"]
+    banco = ControleProcessos(config.CAMINHO_BANCO)
+    banco.salvar(numero, "exportado")
+    banco.fechar()
+
+    assert saidas.main([]) == 0  # sem análise nova: não registra execução à toa
+    assert saidas.main([]) == 0
+    banco = ControleProcessos(config.CAMINHO_BANCO)
+    assert banco.execucoes_recentes() == []
+
+    (saida / "OK.md").write_text(_analise(entrada), encoding="utf-8")
+    banco.fechar()
+    assert saidas.main([]) == 0
+    banco = ControleProcessos(config.CAMINHO_BANCO)
+    (execucao,) = banco.execucoes_recentes()
+    assert execucao[3] == "saidas" and execucao[7] == 1 and execucao[8] == 0  # modo, análises, código de saída
+    assert [e[2:4] for e in banco.historico_do_processo(numero)] == [("analise", "ok")]
+    banco.fechar()
