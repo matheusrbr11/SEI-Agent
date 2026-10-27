@@ -1,0 +1,3 @@
+# Para desenvolver e rodar os testes:
+-r requirements.txt
+pytest==9.1.1
