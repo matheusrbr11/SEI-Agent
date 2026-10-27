@@ -152,6 +152,7 @@ def _preparar_main(monkeypatch, tmp_path, eventos, sem_saida):
     monkeypatch.setattr(main, "SEIService", lambda *a, **k: _SEIFalso(eventos))
     monkeypatch.setattr(main, "argumentos", lambda: argparse.Namespace(processo="P1", reanalisar=False, sem_saida=sem_saida))
     monkeypatch.setattr(main.getpass, "getpass", lambda *_: "senha")
+    monkeypatch.setattr(main, "_interativo", lambda: True)
     monkeypatch.setattr(config, "SEI_USUARIO", "usuario")
     monkeypatch.setattr(config, "CAMINHO_BANCO", tmp_path / "t.db")
 

@@ -1,6 +1,8 @@
 import logging
 from pathlib import Path
 
+import keyring
+import keyring.errors
 import pytest
 from jupiter import configurar_log
 
@@ -13,6 +15,34 @@ def teams_desligado(monkeypatch):
     """Nenhum teste pode mandar mensagem de verdade pelo Teams, mesmo que o .env tenha o webhook configurado."""
     monkeypatch.setattr(config, "TEAMS_WEBHOOK_URL", "")
     monkeypatch.setattr(config, "TEAMS_DESTINATARIOS", [])
+
+
+class _CofreEmMemoria:
+    """Cofre de mentira: nenhum teste lê nem grava o Gerenciador de Credenciais de verdade."""
+
+    def __init__(self):
+        self.senhas = {}
+
+    def get_password(self, servico, usuario):
+        return self.senhas.get((servico, usuario))
+
+    def set_password(self, servico, usuario, senha):
+        self.senhas[(servico, usuario)] = senha
+
+    def delete_password(self, servico, usuario):
+        if (servico, usuario) not in self.senhas:
+            raise keyring.errors.PasswordDeleteError("não existe")
+        del self.senhas[(servico, usuario)]
+
+
+@pytest.fixture(autouse=True)
+def cofre(monkeypatch):
+    """O cofre de senhas dos testes (vazio a cada teste); devolve o dict (serviço, usuário) -> senha."""
+    falso = _CofreEmMemoria()
+    monkeypatch.setattr(keyring, "get_password", falso.get_password)
+    monkeypatch.setattr(keyring, "set_password", falso.set_password)
+    monkeypatch.setattr(keyring, "delete_password", falso.delete_password)
+    return falso.senhas
 
 
 @pytest.fixture(autouse=True)

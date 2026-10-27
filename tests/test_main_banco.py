@@ -51,6 +51,7 @@ def preparar(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "PASTA_AUTOMATE_ENTRADA", tmp_path / "entrada")
     monkeypatch.setattr(config, "SHAREPOINT_PASTA_SAIDA", None)
     monkeypatch.setattr(main.getpass, "getpass", lambda *_: "senha")
+    monkeypatch.setattr(main, "_interativo", lambda: True)
 
     def rodar(sei, onedrive=True, processo=None, reanalisar=False, sharepoint_configurado=True):
         destino = tmp_path / "onedrive"
