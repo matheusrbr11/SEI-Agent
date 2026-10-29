@@ -208,6 +208,15 @@ def processar_saidas(entregues, antes, controle=None):
 
 def main():
     _configurar_log()
+    try:
+        return _executar()
+    except Exception:
+        # No Agendador de Tarefas ninguém vê a tela: sem isto, um erro inesperado não deixaria rastro no log.
+        log.exception("Execução interrompida por erro inesperado.")
+        return 1
+
+
+def _executar():
     _avisar_texto_modelo()
     args = argumentos()
     credencial = obter_credenciais()
@@ -216,14 +225,15 @@ def main():
     usuario, senha = credencial
     antes = saidas.impressoes_existentes(config.SHAREPOINT_PASTA_SAIDA)  # o que já estava na saída antes desta execução
     entregues = []  # processos cujo JSON foi copiado para o SharePoint: as análises deles virão da pasta de saída
-    sei = SEIService(config.PASTA_DOWNLOADS, config.LIMITE_TEXTO_DOCUMENTO, config.HEADLESS)
     controle = ControleProcessos(config.CAMINHO_BANCO)
     modo = "processo" if args.processo else config.SEI_MODO
     controle.iniciar_execucao(modo, f"processo={args.processo or '-'} reanalisar={args.reanalisar} sem_saida={args.sem_saida}")
     codigo = 1  # só passa a 0 se a execução chegar ao fim sem nenhum processo com falha
     falhas = []  # processos cuja coleta ou entrega deu erro nesta execução
+    sei = None
     try:  # o banco fica aberto até o fim da espera: cada análise que chega atualiza a linha do processo
         try:
+            sei = SEIService(config.PASTA_DOWNLOADS, config.LIMITE_TEXTO_DOCUMENTO, config.HEADLESS)
             if not sei.autenticar(usuario, senha, config.SEI_ORGAO, config.SEI_UNIDADE):
                 log.error("Não foi possível autenticar no SEI. Se a senha mudou, atualize-a: python -m sei.credenciais --cadastrar")
                 return 1
@@ -240,7 +250,8 @@ def main():
                 if falhou:
                     falhas.append(numero)
         finally:
-            sei.fechar()  # o navegador não precisa ficar aberto durante a espera pelas análises
+            if sei is not None:
+                sei.fechar()  # o navegador não precisa ficar aberto durante a espera pelas análises
         if not args.sem_saida:
             processar_saidas(entregues, antes, controle)
         if falhas:
