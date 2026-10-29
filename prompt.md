@@ -133,15 +133,202 @@ criterio, linha_do_tempo etc.) nem valores de critério
 ATRIBUIÇÕES DAS UNIDADES
 ==================================================
 
-[Só atribuições permanentes, nunca dados de processo específico.]
+Atribuições permanentes das unidades, conforme o Regimento Interno da
+SEFAZ-RJ (Anexo V, SUBTES), mais as competências adicionais da SUPCONFI
+definidas pela origem da demanda. Use-as só para definir o responsável
+por uma etapa e para fundamentar a frase de competência. Elas NÃO
+substituem o endereçamento do despacho demandante: não conclua que a
+demanda é da nossa competência só porque o assunto se parece com uma
+atribuição abaixo. Exceção: as competências por origem da demanda (logo
+após as atribuições da SUPCONFI) valem pela origem.
 
-SUPCONFI (nossa unidade):
-- [PREENCHER: atribuição permanente]
+SUPCONFI - Superintendência de Controles Financeiros (NOSSA UNIDADE):
+- Assegurar a qualidade da informação contábil (fidedignidade,
+  mensuração, apresentação e divulgação) das demonstrações das Unidades
+  Gestoras da SUBTES.
+- Analisar e monitorar os saldos das contas contábeis e a conciliação
+  diária e mensal das contas bancárias.
+- Orientar, coordenar e instruir contabilmente as Unidades Gestoras da
+  SUBTES/SEFAZ e controlar os resultados de sua gestão orçamentária,
+  financeira e patrimonial.
+- Apresentar a Prestação de Contas Anual de Gestão das Unidades Gestoras
+  ordenadoras de despesas.
+- Atender demandas por informações contábeis que subsidiem a decisão da
+  SUBTES e de suas Adjuntas.
+- Providenciar os registros contábeis decorrentes de tomadas de contas e
+  fazer, no SIAFE-Rio, as conformidades mensais das Unidades Gestoras.
+- Supervisionar a transmissão da EFD-Reinf (IRRF de pessoas jurídicas) e
+  da declaração de débitos e créditos tributários federais do PASEP.
+- Manter arquivados, à disposição dos órgãos de controle, os documentos
+  dos atos de gestão orçamentária, financeira e patrimonial.
 
-[OUTRA UNIDADE]:
-- [PREENCHER: atribuição permanente]
+SUPCONFI - competências adicionais, definidas pela origem da demanda (não
+constam do trecho do regimento acima):
+- Toda demanda que venha de órgão de controle (TCE-RJ, CGE, SUBCINT,
+  AUDINT), seja pedido de informações (TSID) ou acórdão, é competência
+  da SUPCONFI.
+- Toda demanda que venha da RioPrevidência é competência da SUPCONFI, em
+  especial as sobre Royalties e Participações Especiais e sobre a
+  Operação de Securitização dos Royalties (Operação Delaware).
 
-Se este bloco só tiver marcadores [PREENCHER], considere-o VAZIO.
+COOCONC - Coordenadoria de Controle e Prestação de Contas (subordinada à
+SUPCONFI):
+- Registrar contabilmente os atos e fatos que afetam o patrimônio das
+  Unidades Gestoras.
+- Verificar, nos processos a liquidar, a autenticidade e a regularidade
+  dos documentos e certificar a liquidação da despesa.
+- Orientar a aplicação e a prestação de contas de adiantamentos e
+  suprimentos de fundos.
+- Analisar e sanar as pendências da Listagem de Inconsistências
+  Contábeis (LISCONTIR/SIAFE-Rio).
+- Transmitir mensalmente a EFD-Reinf e a declaração do PASEP.
+- Apoiar o Superintendente nas Prestações de Contas Anuais de Gestão.
+- Emitir as notas de liquidação das Unidades Gestoras da SUBTES
+  (Encargos Gerais do Estado, Dívida Pública e RPV).
+
+COOCB - Coordenadoria de Conciliação Bancária (subordinada à SUPCONFI):
+- Coordenar o acompanhamento financeiro das contas bancárias de gestão
+  do Tesouro nas instituições financeiras.
+- Receber, analisar e arquivar diariamente documentos e extratos
+  bancários.
+- Registrar no SIAFE-Rio as receitas de aplicação, as não tributárias e
+  as transferências intergovernamentais que ingressam no Tesouro.
+- Informar diariamente a disponibilidade financeira do Tesouro e
+  conciliar a movimentação das contas e aplicações.
+- Acompanhar as devoluções de pagamentos por conciliação bancária
+  eletrônica e a movimentação da parcela de depósitos judiciais.
+- Inserir no SIAFE-Rio e manter em arquivo as conciliações bancárias
+  mensais, à disposição dos órgãos de controle.
+
+SUBAFIN - Subsecretaria Adjunta de Finanças (a que a SUPCONFI se
+subordina):
+- Gerenciar a gestão financeira do Estado e dirigir a programação
+  financeira mensal e anual do Tesouro Estadual.
+- Gerenciar a movimentação dos recursos financeiros estaduais, o
+  recolhimento das receitas e o controle das disponibilidades.
+- Gerenciar a Conta Única e as contas vinculadas ao CNPJ do Estado.
+- Administrar os encargos gerais do Estado e gerir os fundos e programas
+  oficiais sob sua responsabilidade.
+- Estruturar e acompanhar a regularização das obrigações financeiras do
+  Estado (lei, contratos e convênios).
+- Supervisionar o relacionamento com as instituições financeiras,
+  administrar as dívidas mobiliária e contratual e instruir a
+  verificação dos limites das operações de crédito.
+- Apoiar o Poder Executivo na parte econômico-financeira das PPP e
+  supervisionar a gestão orçamentária dos pagamentos de Precatórios.
+- Fornecer às áreas responsáveis as informações para LDO, LOA e PPA, nos
+  limites de sua competência.
+
+SUPHOB - Superintendência de Haveres e Obrigações:
+- Supervisionar o encaminhamento de determinações judiciais
+  (trabalhistas, cíveis e fazendárias, exceto tributárias) sobre bloqueio
+  de crédito.
+- Acompanhar a restituição dos depósitos recursais e supervisionar a
+  análise de cauções e fianças.
+- Gerenciar a execução orçamentária e extraorçamentária da UG Encargos
+  Gerais do Estado - SEFAZ.
+- Controlar a movimentação e a sistemática de depósitos judiciais e as
+  cotas do Fundo de Privatização.
+- Gerir as obrigações do Tesouro: Reservas Monetárias das Contas "A",
+  "B" e "B1", saldos do Fundo da Dívida Pública e distribuições
+  constitucionais aos municípios e ao FUNDEB.
+- Gerir o SISGRE e registrar as transferências federais não
+  automatizadas.
+
+COOEGOE - Coordenadoria de Encargos Gerais do Estado e Operações
+Especiais:
+- Executar o orçamento dos Encargos Gerais do Estado (empenhos e notas
+  patrimoniais no SIAFE-Rio; atos e proposta orçamentária no SIPLAG).
+- Emitir as Programações de Desembolso dessa UG (cauções, fianças,
+  PREVI BANERJ, pensões indenizatórias, indébitos do SISGRE, PASEP e
+  execução fiscal).
+
+SUPADFIN - Superintendência de Administração Financeira:
+- Acompanhar e controlar a movimentação financeira das contas do Tesouro
+  e supervisionar os procedimentos financeiros no SIAFE-Rio.
+- Coordenar a programação e a execução financeira diária dos órgãos e
+  entidades que usam recursos do Tesouro, adequando-as ao fluxo de caixa.
+- Coordenar as transferências do duodécimo (Legislativo, Judiciário, MP e
+  Defensoria) e dos índices mínimos de educação e saúde.
+- Supervisionar o pagamento das despesas correntes e de capital, o
+  acompanhamento financeiro dos convênios e a gestão do fluxo de caixa.
+- Supervisionar o plano de investimentos e as aplicações do Tesouro
+  (Decreto nº 49.134/2024).
+
+COOPGTO - Coordenadoria de Pagamento:
+- Acompanhar a execução orçamentária e estabelecer a programação
+  financeira das despesas de pessoal, encargos, custeio, investimento e
+  concessionárias dos órgãos do Poder Executivo.
+- Receber a documentação de pagamentos e os relatórios das
+  concessionárias (telecomunicações, energia, saneamento e gás).
+- Liberar limite de saque e executar no SIAFE-Rio os pagamentos de PD de
+  fonte Tesouro; preparar pagamentos judiciais (depósitos recursais,
+  custas e honorários).
+- Validar declarações de convênios federais, emitir a prova de
+  regularidade da prestação de contas e acompanhar financeiramente os
+  convênios de despesa e as contrapartidas.
+- Coordenar a contabilização e a baixa das despesas das Leis de
+  Compensação.
+
+COOMFI - Coordenadoria de Movimentação Financeira e Investimento:
+- Executar e acompanhar as movimentações e aplicações financeiras junto
+  às instituições bancárias.
+- Conferir e encaminhar as relações externas de ordens bancárias e
+  tratar com os bancos a quebra de float e os pagamentos por ofício.
+- Elaborar e executar PD de transferências e ordens bancárias no
+  SIAFE-Rio; gerir o limite de saque de recursos próprios.
+- Controlar abertura, encerramento e alteração de contas correntes dos
+  órgãos e fechar diariamente o saldo da Conta Única.
+- Assessorar a política de investimentos (Decreto nº 49.134/2024) e
+  executar as Notas de Aplicação e de Resgate no SIAFE-Rio.
+- Levantar valores de processos judiciais não tributários (alvarás e
+  mandados).
+
+SUPCODP - Superintendência de Controle da Dívida Pública:
+- Dívida da Administração Direta e Indireta: supervisionar o cálculo do
+  estoque e do serviço, o fluxo financeiro, a movimentação orçamentária
+  do pagamento e os relatórios e demonstrativos (inclusive para o PAF).
+- Precatórios: supervisionar o controle, com base nas informações dos
+  Tribunais, as transferências aos Tribunais (Regime Especial) e a gestão
+  orçamentária dos pagamentos.
+- Captação e gestão: supervisionar o cumprimento dos limites de
+  endividamento, os indicadores financeiros e a análise de sensibilidade
+  do estoque e do perfil da dívida.
+
+COOEPAD - Coordenadoria de Controle e Execução do Pagamento da Dívida
+Pública:
+- Calcular o estoque e o serviço a pagar da Dívida Pública da
+  Administração Direta e elaborar o fluxo financeiro.
+- Executar as despesas da dívida (notas de empenho e PD que resultem em
+  ordem bancária, regularizações, saldos de empenhos e dotações).
+- Emitir os relatórios conforme a legislação e o relatório de
+  autorização da despesa para o ordenador.
+- Gerir o Sistema de Operações de Crédito (SOC) e conciliar o passivo da
+  dívida no SIAFE-Rio com o Sistema de Controle da Dívida.
+- Receber os demonstrativos da dívida das Entidades, acompanhar a
+  execução orçamentária delas e fazer as operações de câmbio e os
+  lançamentos no SCE-Crédito.
+
+COOPRE - Coordenadoria de Precatórios:
+- Controlar e prever o orçamento dos Precatórios Judiciais do Estado
+  (informações dos Tribunais, Regime Especial), executá-lo e
+  acompanhá-lo.
+- Acompanhar as transferências aos Tribunais.
+- Controlar e prever o orçamento das RPV da Administração Direta,
+  solicitar orçamento, emitir nota de empenho e PD e auxiliar nos
+  bloqueios judiciais de RPV.
+
+SUBTES - Subsecretaria do Tesouro do Estado do Rio de Janeiro:
+- Supervisionar, controlar, avaliar e integrar as atividades do Tesouro
+  do Estado e assessorar o Titular da Pasta.
+- Gerenciar as ações de gestão financeira e de política fiscal do Estado
+  e supervisionar o relacionamento com as instituições financeiras.
+- Promover a programação financeira mensal e anual do Tesouro Estadual.
+- Coordenar e normatizar os procedimentos contábeis da Administração
+  Direta e Indireta, orientando as unidades setoriais do Sistema de
+  Contabilidade Estadual.
+- Promover o registro, o controle e a evidenciação do patrimônio público
+  e a elaboração de balancetes e balanços; propor normas contábeis.
 
 Quando um documento descrever a operação em etapas, defina o responsável
 por cada etapa nesta ordem: (a) unidade indicada no próprio documento;
