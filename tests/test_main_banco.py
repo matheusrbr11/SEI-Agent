@@ -130,6 +130,37 @@ def test_falha_de_autenticacao_devolve_1_e_a_execucao_fica_registrada(preparar):
     assert fim and codigo == 1
 
 
+def test_erro_inesperado_no_sei_nao_derruba_o_main_vai_ao_log_e_fecha_o_navegador(preparar, caplog):
+    class QuebraNaLista(SEIFalso):
+        fechado = False
+
+        def listar_todos(self):
+            raise RuntimeError("SEI fora do ar")
+
+        def fechar(self):
+            self.fechado = True
+
+    sei = QuebraNaLista()
+    assert preparar(sei) == 1  # não levanta: o Agendador de Tarefas só veria a tela de erro, que ninguém lê
+    assert sei.fechado
+    assert "SEI fora do ar" in caplog.text
+    _, _, fim, _, _, _, _, _, codigo = _ultima_execucao()
+    assert fim and codigo == 1
+
+
+def test_navegador_que_nao_abre_devolve_1_e_a_execucao_fica_registrada(preparar, monkeypatch, caplog):
+    def nao_abre(*args, **kwargs):
+        raise RuntimeError("driver incompatível")
+
+    preparar(SEIFalso())  # só para aplicar a configuração do teste
+    monkeypatch.setattr(main, "SEIService", nao_abre)
+    monkeypatch.setattr(main, "argumentos", lambda: argparse.Namespace(processo=None, reanalisar=False, sem_saida=True))
+    assert main.main() == 1
+    assert "driver incompatível" in caplog.text
+    _, _, fim, _, _, _, _, _, codigo = _ultima_execucao()
+    assert fim and codigo == 1
+
+
 # --- reaproveitar o JSON
 
 def test_reenvio_reaproveita_o_json_sem_coletar_de_novo(preparar):
