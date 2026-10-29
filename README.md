@@ -22,12 +22,13 @@
 - [Execução Agendada](#-execução-agendada)
 - [Testes](#-testes)
 - [Contribuição](#-contribuição)
+- [Autor](#-autor)
 
 ---
 
 ## 📌 Sobre o Projeto
 
-O **SEI-Agent** é um programa que trabalha sozinho: entra no SEI, escolhe os processos que precisam de análise, lê os documentos de cada um e envia tudo para uma análise automática feita no Power Automate. Quando a análise fica pronta, o programa a revisa, corrige o que for só de formato e avisa quem precisa saber, pelo Teams.
+O **SEI-Agent** é um programa que trabalha sozinho: entra no SEI, escolhe os processos que precisam de análise, lê os documentos de cada um e envia tudo para uma análise automática feita pelo AI Builder, dentro do Power Automate. Quando a análise fica pronta, o programa a revisa, corrige o que for só de formato e avisa quem precisa saber, pelo Teams.
 
 Ele **não altera nada no SEI**. A análise é uma proposta e deve sempre ser revisada por uma pessoa.
 
@@ -36,7 +37,7 @@ Ele **não altera nada no SEI**. A análise é uma proposta e deve sempre ser re
 ## ✨ Funcionalidades
 
 - **Coleta no SEI:** entra com o seu usuário, escolhe os processos (pelos que têm um marcador ou pelos que acabaram de chegar) e lê os documentos, inclusive os anexos em PDF e Word.
-- **Envio para a análise:** entrega os dados de cada processo ao Power Automate e espera a análise voltar.
+- **Envio para a análise:** entrega os dados de cada processo ao Power Automate, onde o AI Builder faz a análise, e espera ela voltar.
 - **Revisão da análise:** corrige o formato e confere o conteúdo com os dados do processo. O que precisa de olho humano fica num relatório.
 - **Aviso pelo Teams:** envia a análise pronta para quem você escolher.
 - **Registro de tudo:** um banco de dados local guarda o que já foi feito, o que deu errado e quais foram os erros de cada análise.
@@ -53,7 +54,7 @@ Ele **não altera nada no SEI**. A análise é uma proposta e deve sempre ser re
     SEI-Agent
          │   2. envia os dados (pasta do OneDrive)
          ▼
-  Power Automate  ──►  análise automática
+  Power Automate  ──►  AI Builder (análise)
          │   3. a análise volta (pasta do OneDrive)
          ▼
     SEI-Agent
@@ -62,7 +63,7 @@ Ele **não altera nada no SEI**. A análise é uma proposta e deve sempre ser re
   Teams + relatório
 ```
 
-O Python não faz a análise: ela acontece no Power Automate. A comunicação entre os dois é por duas pastas do SharePoint sincronizadas pelo OneDrive, uma para enviar e outra para receber.
+O Python não faz a análise: ela acontece no Power Automate, pelo AI Builder. A comunicação entre os dois é por duas pastas do SharePoint sincronizadas pelo OneDrive, uma para enviar e outra para receber.
 
 ---
 
@@ -95,7 +96,7 @@ SEI-Agent/
 │
 ├── main.py               # Programa principal
 ├── config.py             # Lê as configurações do .env
-├── prompt.md             # Instruções da análise (cópia do que está no Power Automate)
+├── prompt.md             # Instruções da análise (cópia do prompt do AI Builder)
 ├── prompt_revisor.md     # Instruções para revisar uma análise
 ├── .env.example          # Modelo das configurações
 │
@@ -121,7 +122,7 @@ Edite o arquivo `.env`, criado na instalação. O que ficar vazio usa o valor pa
 | `SEI_ORGAO` / `SEI_UNIDADE` | Órgão e unidade em que o programa trabalha |
 | `SEI_MODO` | `novos` (padrão): processos que chegaram depois da primeira execução. `marcador`: processos com o marcador abaixo |
 | `SEI_MARCADOR` | Marcador dos processos a analisar, no modo `marcador` |
-| `HEADLESS` | `True` roda o navegador sem abrir janela |
+| `HEADLESS` | Mantenha `False`: com o navegador oculto o SEI trava |
 | `TENTATIVAS_MAXIMAS` | Quantas falhas seguidas um processo aguenta antes de o programa deixá-lo de lado |
 | `SHAREPOINT_PASTA_ENTRADA` | Pasta do OneDrive para onde os dados são enviados |
 | `SHAREPOINT_PASTA_SAIDA` | Pasta do OneDrive de onde as análises são lidas |
@@ -184,25 +185,30 @@ O relatório mostra o que já foi feito, o que está pendente, o que deu erro e 
 
 ## ⏰ Execução Agendada
 
-Com a senha já cadastrada, o programa pode rodar sozinho. No PowerShell, ajuste o caminho do Python, o da pasta do projeto e os horários:
+Com a senha já cadastrada, o programa pode rodar sozinho. No PowerShell, ajuste o caminho do Python, o da pasta do projeto, os dias e os horários (um gatilho para cada horário):
 
 ```powershell
 $pasta = "\\servidor\caminho\SEI-Agent"
+$horas = '09:00', '11:00', '14:00', '16:00'
+$gatilhos = foreach ($h in $horas) {
+  New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $h
+}
 $acao = New-ScheduledTaskAction `
   -Execute "C:\caminho\do\python.exe" `
   -Argument "`"$pasta\main.py`"" -WorkingDirectory $pasta
-$gatilho = New-ScheduledTaskTrigger -Once -At 08:00 `
-  -RepetitionInterval (New-TimeSpan -Minutes 30) -RepetitionDuration (New-TimeSpan -Hours 10)
-$config = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew `
-  -ExecutionTimeLimit (New-TimeSpan -Hours 1) -StartWhenAvailable
+$config = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable `
+  -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 45)
 $quem = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive
-Register-ScheduledTask -TaskName "SEI-Agent" -Action $acao -Trigger $gatilho -Settings $config -Principal $quem
+Register-ScheduledTask -TaskName "SEI-Agent" -Action $acao -Trigger $gatilhos -Settings $config -Principal $quem
 ```
 
 - Use o caminho de rede completo, e não a letra do disco mapeado.
-- A tarefa só roda com o **mesmo usuário** que cadastrou a senha, e com ele logado.
-- O computador precisa estar ligado e com o OneDrive aberto.
-- Teste antes à mão. `HEADLESS=True` evita a janela do navegador.
+- A tarefa só roda com o **mesmo usuário** que cadastrou a senha, e com ele logado. Pode estar com a tela bloqueada (Win+L), mas não pode ter saído da conta nem estar com o computador suspenso.
+- O navegador abre uma janela a cada execução. Não use `HEADLESS=True`: com o navegador oculto o SEI trava.
+- O computador precisa estar ligado e com o OneDrive aberto. Se ele reiniciar, a tarefa só volta a rodar depois que o usuário logar.
+- Se uma execução falhar, a próxima tenta de novo. Se ainda estiver rodando quando chegar o horário seguinte, esse horário é pulado. O motivo de qualquer falha fica no log.
+- Teste antes à mão.
+- Para acompanhar: `(Get-ScheduledTaskInfo -TaskName "SEI-Agent").LastTaskResult` (`0` = ok, `1` = falha) e `python -m banco.relatorio`.
 
 ---
 
@@ -219,10 +225,16 @@ Os testes não acessam o SEI, o Teams nem o OneDrive de verdade.
 
 ## 🤝 Contribuição
 
-Dúvidas, sugestões e problemas devem ser levados ao responsável pelo projeto. Se as instruções da análise mudarem, atualize o `prompt.md` e o que ele alimenta no Power Automate.
+Dúvidas, sugestões e problemas devem ser levados ao responsável pelo projeto. Se as instruções da análise mudarem, atualize o `prompt.md` e o prompt do AI Builder, no Power Automate.
+
+---
+
+## 👤 Autor
+
+**Matheus Ribeiro** · [@matheusrbr11](https://github.com/matheusrbr11)
 
 ---
 
 <div align="center">
-  <sub>SEI-Agent</sub>
+  <sub>SEI-Agent &nbsp;|&nbsp; Autor: <a href="https://github.com/matheusrbr11">Matheus Ribeiro</a></sub>
 </div>
